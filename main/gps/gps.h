@@ -11,3 +11,14 @@ static const uart_config_t gps_uart = {
     .source_clk = UART_SCLK_DEFAULT
 };
 
+struct gps_info {
+    double utc;
+    double lat;
+    double logt;
+    char lat_dir;
+    char logt_dir;
+};
+
+static struct {
+    void (*new_gps)(char*, int, struct gps_info);
+} gps_callbacks = {NULL, NULL};

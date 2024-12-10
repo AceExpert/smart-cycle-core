@@ -23,6 +23,8 @@ void read_gps(TimerHandle_t timer) {
     int len = uart_read_bytes(UART_NUM_1, data, 256, 20 / portTICK_PERIOD_MS);
     data[len] = '\0';
     printf("%s", data);
+
+    //parse_gps_data(data, len);
 }
 
 void parse_gps_data(char* data, int len) {
@@ -31,15 +33,20 @@ void parse_gps_data(char* data, int len) {
     int len = split((const unsigned char*)data, len, '\n', res);
 
     for(int i = 0; i < len; i++) {
-        struct split_result nmea_mes[14];
-        int nmea_len = split(res[i].text, res[i].len, ',', nmea_mes);
-        double utc, lat, logt;
-        char lat_dir, long_dir;
+        //struct split_result nmea_mes[14];
+        //int nmea_len = split(res[i].text, res[i].len, ',', nmea_mes);
         
-        sscanf("$GPGGA,%lf,%lf,%c,%lf,%c,", &utc, &lat, &lat_dir, &logt, &long_dir);
+        struct gps_info gp_info = {
+            .utc = 0,
+        };
         
-        if(utc) {
-            
+        sscanf("$GPGGA,%lf,%lf,%c,%lf,%c,", &(gp_info.utc), &(gp_info.lat), &(gp_info.lat_dir), &(gp_info.logt), &(gp_info.logt_dir));
+        
+        if(gp_info.utc) {
+            if(gps_callbacks.new_gps) {
+                gps_callbacks.new_gps(res[i].text, res[i].len, gp_info);
+            }
+            break;
         }
     };
 };
