@@ -84,7 +84,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
             esp_ble_gatts_send_response(itf, param->write.conn_id, param->write.trans_id, 0, NULL);
         } else {
             struct split_result res[10];
-            int size = split(param->write.value, param->write.len, res);
+            int size = split(param->write.value, param->write.len, ' ', res);
             
             if (xTimerIsTimerActive(auth_timer) != pdTRUE) {
                 if(size == 2) {

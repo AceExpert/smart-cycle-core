@@ -119,7 +119,7 @@ void ip_event_handler(void *event_handler_arg, esp_event_base_t event_base, int3
     {
     case IP_EVENT_STA_GOT_IP:
         ip_event_got_ip_t* ip_evt_data = event_data;
-        printf("IP: "IPSTR, IP2STR(&(ip_evt_data->ip_info.ip)));
+        printf("IP: "IPSTR"\n", IP2STR(&(ip_evt_data->ip_info.ip)));
         break;
     
     default:
