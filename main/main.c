@@ -10,16 +10,15 @@
 #include <esp_netif.h>
 #include <esp_vfs.h>
 
-#include "lwip/sockets.h"
-#include "lwip/err.h"
-#include "lwip/sys.h"
-#include <lwip/netdb.h>
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
 #include "freertos/task.h"
 
+#include "lwip/sockets.h"
+
 #include "ble/main.h"
+#include "gps/gps.h"
+#include "utils/main.h"
 
 const char* WIFI_SSID[] = {"GUEST_SECURED", "STUDENT_SECURED", "CAMPUS_SECURED", "ACADEMIC_SECURED", "Academic"};
 const char* WIFI_USER = "24IM10016";
@@ -32,8 +31,85 @@ void cycle_unlocked();
 void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 void ip_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 void reconnect(TimerHandle_t timer);
+void send_gps(const char* tag, struct gps_info gpsinfo);
+void on_gps_connected(int phone_sock);
+void on_gps_disconnected(int phone_sock);
 
 TimerHandle_t reconnect_timer = NULL;
+TimerHandle_t gps_server_auth = NULL;
+
+int phone_socket = 0;
+uint8_t phone_connected = 0;
+
+
+static char* SERV_TOKEN = "auth 1234";
+
+static struct {
+    void (*on_authorized)(int sock_fd);
+    void (*on_disconnected)(int sock_fd);
+} gps_server_callbacks;
+
+void gps_serv_auth(TimerHandle_t timer) {
+    if(phone_connected) {
+        close(phone_socket);
+    }
+};
+
+void gps_server(void*) {
+
+    struct sockaddr_in cycle_addr = {
+        .sin_addr.s_addr = htonl(IPADDR_ANY),
+        .sin_port = htons(3000),
+        .sin_family = AF_INET,
+    };
+
+    int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+
+    int opt = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    bind(sock, (struct sockaddr*)&cycle_addr, sizeof(cycle_addr));
+
+    listen(sock, 1);
+
+    struct sockaddr_in phone_addr;
+    socklen_t addr_len = sizeof(phone_addr);
+
+    while(1) {
+        phone_socket = accept(sock, (struct sockaddr*)&phone_addr, &addr_len);
+        phone_connected = 1;
+        if(gps_server_auth == NULL)
+            gps_server_auth = xTimerCreate("gps_server_auth", pdMS_TO_TICKS(30000), pdFALSE, NULL, gps_serv_auth);
+        xTimerReset(gps_server_auth, portMAX_DELAY);
+
+        while(1) {
+            char data[256];
+
+            int len = recv(phone_socket, data, 256, 0);
+            
+            if(len == -1) {
+                phone_connected = 0;
+                if(xTimerIsTimerActive(gps_server_auth) != pdFALSE) {
+                    xTimerStop(gps_server_auth, portMAX_DELAY);
+                }
+                gps_server_callbacks.on_disconnected(phone_socket);
+                break;
+            }
+
+            if(xTimerIsTimerActive(gps_server_auth) != pdFALSE) {
+                if(!match(SERV_TOKEN, data, 9, len)) {
+                    phone_connected = 0;
+                    close(phone_socket);
+                    xTimerStop(gps_server_auth, portMAX_DELAY);
+                    break;
+                }
+                xTimerStop(gps_server_auth, portMAX_DELAY);
+                gps_server_callbacks.on_authorized(phone_socket);
+            }
+        }
+    };
+    vTaskDelete(NULL);
+};
 
 void start_bluetooth() {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -56,8 +132,8 @@ void start_bluetooth() {
 }
 
 void setup_ble() {
-    cycle_callbacks.locked = cycle_locked;
-    cycle_callbacks.unlocked = cycle_unlocked;
+    set_cycle_callback(LOCKED, cycle_locked);
+    set_cycle_callback(UNLOCKED, cycle_unlocked);
 
     esp_ble_gap_register_callback(esp_ble_gap_cb);
     esp_ble_gatts_register_callback(esp_gatts_cb);
@@ -80,6 +156,14 @@ void setup_wifi() {
 
     esp_wifi_start();
 }
+
+void setup_gps() {
+    set_on_gps(send_gps);
+    gps_server_callbacks.on_authorized = on_gps_connected;
+    gps_server_callbacks.on_disconnected = on_gps_disconnected;
+    gps_start();
+    xTaskCreate(gps_server, "gps_server", 4096, NULL, 4, NULL);
+};
 
 void event_handler_registry() {
 
@@ -104,6 +188,7 @@ void app_main(void)
     setup_wifi();
     start_bluetooth();
     setup_ble();
+    setup_gps();
 }
 
 void cycle_unlocked() {
@@ -112,6 +197,20 @@ void cycle_unlocked() {
 
 void cycle_locked() {
 
+}
+
+void send_gps(const char* tag, struct gps_info gpsinfo) {
+    if(phone_connected) {
+        send(phone_socket, tag, strlen(tag), 0);
+    };
+}
+
+void on_gps_connected(int phone_sock) {
+    gps_start_reading();
+}
+
+void on_gps_disconnected(int phone_sock) {
+    gps_stop_reading();
 }
 
 void ip_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -175,13 +274,16 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
             },
         };
 
-        strcpy((const char*)(ap_config.sta.ssid), best_ssid);
+        strcpy((const char*)(ap_config.sta.ssid), "CyberSky");
 
         if(strcmp(best_ssid, "Academic") == 0) {
             esp_wifi_sta_enterprise_disable();
         } else {
             esp_wifi_sta_enterprise_enable();
         };
+
+        strcpy((const char*)(ap_config.sta.password), "hotspot.jio");
+        esp_wifi_sta_enterprise_disable();
 
         esp_wifi_set_config(WIFI_IF_STA, &ap_config);
         esp_wifi_connect();

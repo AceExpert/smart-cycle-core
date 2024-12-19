@@ -21,6 +21,27 @@ TimerHandle_t auth_timer = NULL;
 
 int cycle_state = LOCKED;
 
+struct {
+    void (*locked)();
+    void (*unlocked)();
+} cycle_callbacks = {NULL, NULL};
+
+void set_cycle_callback(int state, void (*callback)()) {
+    switch (state)
+    {
+    case LOCKED:
+        cycle_callbacks.locked = callback;
+        break;
+    
+    case UNLOCKED:
+        cycle_callbacks.unlocked = callback;
+        break;
+        
+    default:
+        break;
+    }
+}
+
 void unauthorize(TimerHandle_t timer) {
     esp_ble_gatts_close(gatts_profile[0].gatts_if, gatts_profile[0].conn_id);
 }
@@ -86,7 +107,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
             struct split_result res[10];
             int size = split(param->write.value, param->write.len, ' ', res);
             
-            if (xTimerIsTimerActive(auth_timer) != pdTRUE) {
+            if (xTimerIsTimerActive(auth_timer) != pdFALSE) {
                 if(size == 2) {
                     if(match("auth", res[0].text, 4, res[0].len) && match(TOKEN, res[1].text, 0, res[1].len)) {
                     } else {

@@ -19,6 +19,9 @@ struct gps_info {
     char logt_dir;
 };
 
-static struct {
-    void (*new_gps)(char*, int, struct gps_info);
-} gps_callbacks = {NULL, NULL};
+void gps_start();
+void gps_disable();
+void gps_start_reading();
+void gps_stop_reading();
+void read_gps(TimerHandle_t timer);
+void set_on_gps(void (*on_gps)(const char*, struct gps_info));

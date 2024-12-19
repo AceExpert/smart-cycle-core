@@ -76,11 +76,6 @@ static esp_ble_adv_data_t scan_rsp_data = {
     .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
 };
 
-static struct {
-    void (*locked)();
-    void (*unlocked)();
-} cycle_callbacks = {NULL, NULL};
-
 static esp_attr_value_t char_value = {.attr_max_len = 200, .attr_len = 0, .attr_value = NULL};
 
 enum CycleState {
@@ -90,3 +85,4 @@ enum CycleState {
 
 void esp_ble_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
 void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_cb_param_t* param);
+void set_cycle_callback(int state, void (*callback)());

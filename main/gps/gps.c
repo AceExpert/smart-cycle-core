@@ -6,10 +6,20 @@
 #include "gps.h"
 #include "../utils/main.h"
 
+TimerHandle_t gps_timer = NULL;
+
+struct {
+    void (*on_gps)(const char*, struct gps_info);
+} gps_callbacks = {NULL};
+
+void set_on_gps(void (*on_gps)(const char*, struct gps_info)) {
+    gps_callbacks.on_gps = on_gps;
+}
+
 void gps_start() {
-    uart_driver_install(UART_NUM_1, 512, 0, 0, NULL, 9);
+    uart_driver_install(UART_NUM_1, 512, 0, 0, NULL, 0);
     uart_param_config(UART_NUM_1, &gps_uart);
-    uart_set_pin(UART_NUM_1, 36, 39, -1, -1);
+    uart_set_pin(UART_NUM_1, -1, 36, -1, -1);
 }
 
 void gps_disable() {
@@ -17,36 +27,70 @@ void gps_disable() {
         uart_driver_delete(UART_NUM_1);
 }
 
-void read_gps(TimerHandle_t timer) {
-    char data[257];
-    uart_flush(UART_NUM_1);
-    int len = uart_read_bytes(UART_NUM_1, data, 256, 20 / portTICK_PERIOD_MS);
-    data[len] = '\0';
-    printf("%s", data);
+void gps_start_reading() {
+    if(gps_timer == NULL) {
+        gps_timer = xTimerCreate("gps_timer", pdMS_TO_TICKS(5000), pdTRUE, NULL, read_gps);
+    }
+    read_gps(NULL);
+    xTimerReset(gps_timer, portMAX_DELAY);
+};
 
-    //parse_gps_data(data, len);
+void gps_stop_reading() {
+    if(xTimerIsTimerActive(gps_timer) != pdFALSE)
+        xTimerStop(gps_timer, portMAX_DELAY);
 }
 
-void parse_gps_data(char* data, int len) {
-    struct split_result res[10];
+void read_gps(TimerHandle_t timer) {
+    char data;
 
-    int len = split((const unsigned char*)data, len, '\n', res);
-
-    for(int i = 0; i < len; i++) {
-        //struct split_result nmea_mes[14];
-        //int nmea_len = split(res[i].text, res[i].len, ',', nmea_mes);
-        
-        struct gps_info gp_info = {
-            .utc = 0,
-        };
-        
-        sscanf("$GPGGA,%lf,%lf,%c,%lf,%c,", &(gp_info.utc), &(gp_info.lat), &(gp_info.lat_dir), &(gp_info.logt), &(gp_info.logt_dir));
-        
-        if(gp_info.utc) {
-            if(gps_callbacks.new_gps) {
-                gps_callbacks.new_gps(res[i].text, res[i].len, gp_info);
+    uart_flush(UART_NUM_1);
+    int t_len = 0;
+    char* tag = malloc(1);
+    while (1) {
+        int len = uart_read_bytes(UART_NUM_1, &data, 1, 20 / portTICK_PERIOD_MS);
+        if(len) {
+            if(!t_len && data != '$') continue;
+            else if (!t_len) {
+                tag[0] = data;
+                t_len++;
+            } else if (t_len) {
+                if(t_len == 6 && !match("$GPGGA", tag, 6, 6)) {
+                    t_len = 0;
+                    free(tag);
+                    tag = malloc(1);
+                    continue;
+                }
+                tag = realloc(tag, t_len+1);
+                if(t_len >= 6) {
+                    if(data == '\n') {
+                        tag[t_len++] = '\0';
+                        break;
+                    };
+                };
+                tag[t_len++] = data;
             }
-            break;
+        } else {
+            t_len = 0;
+            free(tag);
+            tag = malloc(1);
+            continue;
         }
+    }
+
+    struct gps_info gp_info = {
+        .utc = 0,
     };
-};
+
+    free(tag);
+    tag = "$GPGGA,1783.0,3232.32656,N,9583.43344,E,0,00,99.99,,,,,,*48";
+    
+    sscanf(tag, "$GPGGA,%lf,%lf,%c,%lf,%c,", &(gp_info.utc), &(gp_info.lat), &(gp_info.lat_dir), &(gp_info.logt), &(gp_info.logt_dir));
+    
+    printf("%s | utc = %lf , lat = %lf %c , longt = %lf %c\n", tag, gp_info.utc, gp_info.lat, gp_info.lat_dir, gp_info.logt, gp_info.logt_dir);
+    
+    if(gps_callbacks.on_gps != NULL) {
+        gps_callbacks.on_gps(tag, gp_info);
+    }
+
+    //free(tag);
+}
