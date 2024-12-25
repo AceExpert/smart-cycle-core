@@ -13,7 +13,9 @@
 #include "sdmmc_cmd.h"
 
 #include "driver/gpio.h"
+#include "driver/uart.h"
 #include "driver/i2s_std.h"
+#include "driver/i2c_master.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
@@ -21,11 +23,12 @@
 
 #include "lwip/sockets.h"
 
-#include "gps/gps.h"
 #include "ble/main.h"
 #include "utils/main.h"
 
 i2s_chan_handle_t i2s_rx;
+i2c_master_bus_handle_t mpu_bus;
+i2c_master_dev_handle_t mpu_handle;
 
 void cycle_locked();
 void cycle_unlocked();
@@ -89,18 +92,14 @@ void app_main(void)
 {
     printf("Cytroid starting...\n");
 
+    gpio_set_direction(GPIO_NUM_27, GPIO_MODE_OUTPUT);
+    gpio_set_direction(14, GPIO_MODE_OUTPUT);
+
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
-
-    esp_event_loop_create_default();
-    esp_event_handler_register("WIFI_EVENT", ESP_EVENT_ANY_ID, wifi_event_handler, NULL);
-    esp_event_handler_register("IP_EVENT", ESP_EVENT_ANY_ID, ip_event_handler, NULL);
-    esp_netif_init();
-
-    esp_netif_t* sta_int = esp_netif_create_default_wifi_sta();
 
     i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
     i2s_std_config_t i2s_cfg = {
@@ -136,7 +135,34 @@ void app_main(void)
     uart_param_config(UART_NUM_2, &main_uart);
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
 
+    i2c_master_bus_config_t mpu_bus_cfg = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .scl_io_num = 22,
+        .sda_io_num = 21,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+        .i2c_port = 0,
+    };
+
+    i2c_device_config_t mpu_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = 0x68,
+        .scl_speed_hz = 100000,
+    };
+
+    i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
+    i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
+    i2c_master_transmit();
+
     mount_sdcard();
     start_bluetooth();
     setup_ble();
+}
+
+void cycle_unlocked() {
+    uart_write_bytes(UART_NUM_2, ".unlocked", 9);
+}
+
+void cycle_locked() {
+    uart_write_bytes(UART_NUM_2, ".locked", 7);
 }

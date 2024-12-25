@@ -11,6 +11,7 @@
 #include "esp_gatts_api.h"
 
 #include "driver/gpio.h"
+#include "driver/uart.h"
 
 #include "main.h"
 #include "../utils/main.h"
@@ -177,7 +178,12 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
 
                     } else if (match("dir_stop", res[1].text, 8, res[1].len)) {
                         direction_indic(-1, 0, 0);
-                    };
+
+                    } else if (match("audio_connect", res[1].text, 13, res[1].len)) {
+                        uart_write_bytes(UART_NUM_2, ".audio_connect", 14)
+                    } else if (match("audio_disconn", res[1].text, 13, res[1].len)) {
+                        uart_write_bytes(UART_NUM_2, ".audio_disconn", 14)
+                    }
                 };
             }
         }
@@ -224,6 +230,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
             cycle_callbacks.locked();
         }
         esp_ble_gap_start_advertising(&adv_params);
+        uart_write_bytes(UART_NUM_2, ".audio_disconn", 14)
         break;
     }
 
