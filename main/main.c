@@ -162,37 +162,6 @@ void event_handler_registry() {
 
 }
 
-void mount_sdcard() {
-    esp_vfs_fat_sdmmc_mount_config_t sdmount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024
-    };
-
-    sdmmc_host_t sdhost = SDSPI_HOST_DEFAULT();
-
-    spi_bus_config_t bus_cfg = {
-        .miso_io_num = 19,
-        .mosi_io_num = 23,
-        .sclk_io_num = 18,
-        .max_transfer_sz = 4000,
-        .quadhd_io_num = -1,
-        .quadwp_io_num = -1
-    };
-
-    spi_bus_initialize(sdhost.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
-
-    sdspi_device_config_t sddev = SDSPI_DEVICE_CONFIG_DEFAULT();
-    sddev.gpio_cs = 5;
-    sddev.host_id = sdhost.slot;
-
-    sdmmc_card_t* card;
-
-    printf("SD card mount return: %d\n", esp_vfs_fat_sdspi_mount("/sdcard", &sdhost, &sddev, &sdmount_config, &card));
-    sdmmc_card_print_info(stdout, card);
-
-}
-
 void app_main(void)
 {
     printf("Cytroid starting...\n");
@@ -243,8 +212,7 @@ void app_main(void)
     uart_driver_install(UART_NUM_2, 512, 0, 0, NULL, 0);
     uart_param_config(UART_NUM_2, &main_uart);
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
-
-    mount_sdcard();
+    
     setup_wifi();
     start_bluetooth();
     setup_gps();
