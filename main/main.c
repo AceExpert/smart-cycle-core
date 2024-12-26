@@ -15,6 +15,7 @@
 #include "driver/uart.h"
 #include "driver/i2s_std.h"
 #include "driver/i2c_master.h"
+#include "driver/adc.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
@@ -40,6 +41,9 @@ TaskHandle_t* motion_task;
 time_t alert_time = 0;
 time_t turb_time = 0;
 time_t turb_stop = 0;
+
+uint8_t unlocked = 0;
+uint8_t cruise = 0;
 
 void cycle_locked();
 void cycle_unlocked();
@@ -195,61 +199,116 @@ void app_main(void)
 }
 
 void cycle_unlocked() {
+    unlocked = 1;
     uart_write_bytes(UART_NUM_2, ".unlocked\n", 10);
-    vTaskDelete(motion_task);
+    add_playlist("/sdcard/startup.pcm", 0);
+    add_playlist("/sdcard/standby.pcm", 1);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
 }
 
 void cycle_locked() {
+    unlocked = 0;
+    cruise = 0;
     uart_write_bytes(UART_NUM_2, ".locked\n", 8);
-    xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
+}
+
+void process_cmd(const char* cmd) {
+    if(strcpy(cmd, "audio_play") == 0) {
+        cruise = 1;
+        cruise_mode();
+    }
 }
 
 void monitor_motion(void*) {
     uint8_t raw[6];
+
+    uint8_t* uart_cmd = malloc(0);
+    int cmd_len = 0;
+    
+    uint8_t cmd_start = 0;
+
     while(1) {
-        int16_t accel[3];
-        i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1);
 
-        *accel = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) * 10 / 4096.00; 
-        accel[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) * 10 / 4096.00;
-        accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
-
-        double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
-
-        if (ABS(net_a - 10) >= 0.85) {
-            if(alert_time) {
-                alert_time = time(NULL);
-            }
-            else if (turb_time) {
-                if (time(NULL) - turb_time >= 2) {
-                    trigger_alarm();
-                    uart_write_bytes(UART_NUM_2, ".alert\n", 7);
-                    alert_time = time(NULL);
-                };
+        uint8_t d;
+        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 20);
+        
+        if(cmd_start) {
+            if (d == '\n') {
+                cmd_start = 0;
+                uart_cmd = realloc(uart_cmd, cmd_len+1);
+                uart_cmd[cmd_len] = 0;
+                cmd_len = 0;
+                process_cmd(uart_cmd);
+                free(uart_cmd);
+                uart_cmd = malloc(0);
             } else {
-                turb_time = time(NULL);
-            }
-        } else {
-            if (alert_time) {
-                if (time(NULL) - alert_time >= 9) {
-                    turb_stop = 0;
-                    turb_time = 0;
-                    alert_time = 0;
-                    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
-                }
-            } 
-            else if (turb_stop) {
-                if (time(NULL) - turb_stop >= 3) {
-                    turb_stop = 0;
-                    turb_time = 0;
-                    alert_time = 0;
-                }
-            }
-            else if (turb_time) {
-                turb_stop = time(NULL);
+                uart_cmd = realloc(uart_cmd, cmd_len+1);
+                uart_cmd[cmd_len++] = d;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(25));
+
+        if (read_len && d == '.') {
+            cmd_start = 1;
+        }
+
+        if(!cruise) {
+            int16_t accel[3];
+            i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1);
+
+            *accel = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) * 10 / 4096.00; 
+            accel[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) * 10 / 4096.00;
+            accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
+
+            double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
+
+            if (ABS(net_a - 10) >= 0.85) {
+                if(alert_time) {
+                    alert_time = time(NULL);
+                }
+                else if (turb_time) {
+                    if (time(NULL) - turb_time >= (unlocked ? 1 : 2)) {
+                        if(unlocked) {
+                            cruise_mode();
+                            cruise = 1;
+                        } else {
+                            add_playlist("/sdcard/alarm.pcm", 1);
+                            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+                            uart_write_bytes(UART_NUM_2, ".alert\n", 7);
+                            alert_time = time(NULL);
+                        };
+                    };
+                } else {
+                    turb_time = time(NULL);
+                }
+            } else {
+                if (alert_time) {
+                    if (time(NULL) - alert_time >= 9) {
+                        turb_stop = 0;
+                        turb_time = 0;
+                        alert_time = 0;
+                        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+                        clear_playlist(0);
+                    }
+                } 
+                else if (turb_stop) {
+                    if (time(NULL) - turb_stop >= 3) {
+                        turb_stop = 0;
+                        turb_time = 0;
+                        alert_time = 0;
+                    }
+                }
+                else if (turb_time) {
+                    turb_stop = time(NULL);
+                }
+            }
+        };
+
+        if(cruise) {
+
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
+    free(uart_cmd);
     vTaskDelete(NULL);
 }

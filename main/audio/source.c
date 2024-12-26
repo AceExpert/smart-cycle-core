@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "esp_bt.h"
 #include "esp_gap_bt_api.h"
@@ -6,18 +7,73 @@
 #include "esp_avrc_api.h"
 #include "esp_hf_client_api.h"
 
+#include "source.h"
+
 FILE* play_file = NULL;
+struct local_playlist* playlist = NULL;
 
 static esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
 
-void trigger_alarm() {
-    printf("alert\n");
-    if(play_file) {
-        fclose(play_file);
-        play_file = NULL;
+void add_playlist(const char* path, uint8_t repeat) {
+    struct local_playlist* new_play = malloc(sizeof(struct local_playlist));
+    new_play->play = malloc(strlen(path) + 1);
+    strcpy(new_play->play, path);
+    new_play->repeat = repeat;
+    new_play->next = NULL;
+    struct local_playlist* prev_play = playlist;
+    while (prev_play)
+    {
+        if(prev_play->next)
+            prev_play = prev_play->next;
+        else break;
     }
-    play_file = fopen("/sdcard/alarm.pcm", "r");
-    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);    
+    if(prev_play) {
+        prev_play->next = new_play;
+    } else {
+        playlist = new_play;
+    }
+}
+
+void pop_playlist(struct local_playlist** p) {
+    if(p && *p) {
+        struct local_playlist* temp = (*p)->next;
+        free((*p)->play);
+        free(*p);
+        *p = temp;
+    }
+}
+
+void clear_playlist(int index) {
+    int i = 0;
+    struct local_playlist* prev = NULL;
+    struct local_playlist* current = playlist;
+    while (current) {
+        if (i == index) {
+            break;
+        }
+        prev = current;
+        current = current->next;
+        i++;
+    }
+    while(current) {
+        pop_playlist(&current);
+    }
+    if(prev)
+        prev->next = current;
+    else
+        playlist = NULL;
+}
+
+void cruise_mode() {
+    if (playlist) {
+        if(strcpy(playlist->play, "/sdcard/startup.pcm") == 0) {
+            clear_playlist(1);
+        } else {
+            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
+            if(play_file) fclose(play_file);
+            clear_playlist(0);
+        }
+    }
 }
 
 void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
@@ -101,10 +157,6 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     }
     case ESP_A2D_MEDIA_CTRL_ACK_EVT: {
         if (param->media_ctrl_stat.cmd == ESP_A2D_MEDIA_CTRL_SUSPEND) {
-            if(play_file) {
-                fclose(play_file);
-                play_file = NULL;
-            };
         }
         break;
     }
@@ -115,13 +167,25 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
 
 int32_t send_audio(uint8_t* buf, int32_t len) {
     if (buf == NULL || len == 0) return 0;
-    if (play_file != NULL) {
+    if (playlist) {
+        if(play_file == NULL) play_file = fopen(playlist->play, "r");
         if(feof(play_file) != 0) {
-            fseek(play_file, 0, SEEK_SET);
+            if(playlist->repeat) {
+                fseek(play_file, 0, SEEK_SET);
+            } else {
+                fclose(play_file);
+                pop_playlist(&playlist);
+                if(playlist) {
+                    play_file = fopen(playlist->play, "r");
+                } else {
+                    esp_a2d_media_ctrl(ESP_A2D_AUDIO_STATE_SUSPEND);
+                    return 0;
+                }
+            }
         }
-        size_t succ_read = fread(buf, 1, len, play_file);
+        return fread(buf, 1, len, play_file);
     }
-    return len;
+    return 0;
 };
 
 void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param)
