@@ -6,14 +6,71 @@
 #include "esp_avrc_api.h"
 #include "esp_hf_client_api.h"
 
+FILE* play_file = NULL;
+
+static esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
+
+void trigger_alarm() {
+    printf("alert\n");
+    if(play_file) {
+        fclose(play_file);
+        play_file = NULL;
+    }
+    play_file = fopen("/sdcard/alarm.pcm", "r");
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);    
+}
+
+void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
+{
+    switch (event) {
+    /* when authentication completed, this event comes */
+    case ESP_BT_GAP_AUTH_CMPL_EVT: {
+        if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS) {
+
+        }
+        break;
+    }
+    /* when Legacy Pairing pin code requested, this event comes */
+    case ESP_BT_GAP_PIN_REQ_EVT: {
+        if (param->pin_req.min_16_digit) {
+            esp_bt_pin_code_t pin_code = {0};
+            esp_bt_gap_pin_reply(param->pin_req.bda, true, 16, pin_code);
+        } else {
+            esp_bt_pin_code_t pin_code;
+            pin_code[0] = '1';
+            pin_code[1] = '2';
+            pin_code[2] = '3';
+            pin_code[3] = '4';
+            esp_bt_gap_pin_reply(param->pin_req.bda, true, 4, pin_code);
+        }
+        break;
+    }
+
+    case ESP_BT_GAP_CFM_REQ_EVT:
+        esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda, true);
+        break;
+    default: 
+        break;
+    }
+}
+
+
+
 void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     switch (event)
     {
+    case ESP_A2D_PROF_STATE_EVT: {
+        if (param->a2d_prof_stat.init_state == ESP_A2D_INIT_SUCCESS) {
+            esp_a2d_source_connect(speaker_addr);
+        }
+        break;
+    }
     case ESP_A2D_CONNECTION_STATE_EVT: {
         switch (param->conn_stat.state)
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
-            
+            printf("Speaker connected.\n");
+            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
 
@@ -40,12 +97,81 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
             break;
         };
         }
+        break;
+    }
+    case ESP_A2D_MEDIA_CTRL_ACK_EVT: {
+        if (param->media_ctrl_stat.cmd == ESP_A2D_MEDIA_CTRL_SUSPEND) {
+            if(play_file) {
+                fclose(play_file);
+                play_file = NULL;
+            };
+        }
+        break;
     }
     default:
         break;
     }
 };
 
-void recv_audio(const uint8_t* buf, uint32_t len) {
-
+int32_t send_audio(uint8_t* buf, int32_t len) {
+    if (buf == NULL || len == 0) return 0;
+    if (play_file != NULL) {
+        if(feof(play_file) != 0) {
+            fseek(play_file, 0, SEEK_SET);
+        }
+        size_t succ_read = fread(buf, 1, len, play_file);
+    }
+    return len;
 };
+
+void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param)
+{
+    switch (event) {
+    /* when connection state changed, this event comes */
+    case ESP_AVRC_CT_CONNECTION_STATE_EVT: {
+        if (param->conn_stat.connected) {
+            //esp_avrc_ct_send_get_rn_capabilities_cmd(0);
+        } else {
+            //s_avrc_peer_rn_cap.bits = 0;
+        }
+        break;
+    }
+    /* when passthrough responded, this event comes */
+    case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT: {
+        //ESP_LOGI(BT_RC_CT_TAG, "AVRC passthrough response: key_code 0x%x, key_state %d, rsp_code %d", param->psth_rsp.key_code,
+        //            param->psth_rsp.key_state, param->psth_rsp.rsp_code);
+        break;
+    }
+    /* when metadata responded, this event comes */
+    case ESP_AVRC_CT_METADATA_RSP_EVT: {
+        //ESP_LOGI(BT_RC_CT_TAG, "AVRC metadata response: attribute id 0x%x, %s", param->meta_rsp.attr_id, param->meta_rsp.attr_text);
+        free(param->meta_rsp.attr_text);
+        break;
+    }
+    /* when notification changed, this event comes */
+    case ESP_AVRC_CT_CHANGE_NOTIFY_EVT: {
+        //ESP_LOGI(BT_RC_CT_TAG, "AVRC event notification: %d", param->change_ntf.event_id);
+        //bt_av_notify_evt_handler(param->change_ntf.event_id, &param->change_ntf.event_parameter);
+        break;
+    }
+    /* when indicate feature of remote device, this event comes */
+    case ESP_AVRC_CT_REMOTE_FEATURES_EVT: {
+        //ESP_LOGI(BT_RC_CT_TAG, "AVRC remote features %"PRIx32", TG features %x", param->rmt_feats.feat_mask, param->rmt_feats.tg_feat_flag);
+        break;
+    }
+    /* when get supported notification events capability of peer device, this event comes */
+    case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT: {
+        //ESP_LOGI(BT_RC_CT_TAG, "remote rn_cap: count %d, bitmask 0x%x", param->get_rn_caps_rsp.cap_count, param->get_rn_caps_rsp.evt_set.bits);
+        //s_avrc_peer_rn_cap.bits = param->get_rn_caps_rsp.evt_set.bits;
+        break;
+    }
+    /* when set absolute volume responded, this event comes */
+    case ESP_AVRC_CT_SET_ABSOLUTE_VOLUME_RSP_EVT: {
+        //ESP_LOGI(BT_RC_CT_TAG, "Set absolute volume response: volume %d", param->set_volume_rsp.volume);
+        break;
+    }
+    default: 
+        break;
+
+    }
+}

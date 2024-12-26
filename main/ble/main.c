@@ -45,7 +45,7 @@ void set_cycle_callback(int state, void (*callback)()) {
     }
 }
 
-void direction_indic(uint8_t dynam, uint8_t m1, uint8_t m2) {
+void direction_indic(int8_t dynam, uint8_t m1, uint8_t m2) {
     switch (dynam)
     {
     case 0: {
@@ -77,7 +77,7 @@ void esp_ble_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param)
     switch (event)
     {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
-        esp_ble_gap_start_advertising(&adv_params);
+        //esp_ble_gap_start_advertising(&adv_params);
         break;
     default:
         break;
@@ -180,9 +180,9 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         direction_indic(-1, 0, 0);
 
                     } else if (match("audio_connect", res[1].text, 13, res[1].len)) {
-                        uart_write_bytes(UART_NUM_2, ".audio_connect", 14)
+                        uart_write_bytes(UART_NUM_2, ".audio_connect\n", 15);
                     } else if (match("audio_disconn", res[1].text, 13, res[1].len)) {
-                        uart_write_bytes(UART_NUM_2, ".audio_disconn", 14)
+                        uart_write_bytes(UART_NUM_2, ".audio_disconn\n", 15);
                     }
                 };
             }
@@ -230,7 +230,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
             cycle_callbacks.locked();
         }
         esp_ble_gap_start_advertising(&adv_params);
-        uart_write_bytes(UART_NUM_2, ".audio_disconn", 14)
+        uart_write_bytes(UART_NUM_2, ".audio_disconn\n", 15);
         break;
     }
 

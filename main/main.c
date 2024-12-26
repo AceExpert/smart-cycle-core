@@ -1,13 +1,12 @@
 #include <stdio.h>
+#include "time.h"
+#include <math.h>
 #include <string.h>
 #include <time.h>
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "esp_system.h"
 
-#include <esp_wifi.h>
-#include "esp_eap_client.h"
-#include <esp_netif.h>
 #include <esp_vfs.h>
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
@@ -25,13 +24,26 @@
 
 #include "ble/main.h"
 #include "utils/main.h"
+#include "audio/source.h"
+
+#define MPU_VALUE(b2, b1) ((int16_t)(((b2) >> 7) ? ~((b2) << 8 | (b1)) : ((b2) << 8 | (b1))))
+#define ABS(a) (((a) > 0) ? (a) : -(a))
 
 i2s_chan_handle_t i2s_rx;
 i2c_master_bus_handle_t mpu_bus;
 i2c_master_dev_handle_t mpu_handle;
 
+uint8_t mpu_addr[3] = {0x6B, 0x1C, 0x3B};
+
+TaskHandle_t* motion_task;
+
+time_t alert_time = 0;
+time_t turb_time = 0;
+time_t turb_stop = 0;
+
 void cycle_locked();
 void cycle_unlocked();
+void monitor_motion(void*);
 
 void start_bluetooth() {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -40,6 +52,23 @@ void start_bluetooth() {
 
     esp_bluedroid_init();
     esp_bluedroid_enable();
+    
+    esp_bt_gap_set_device_name("Cytroid-BR");
+    esp_bt_gap_register_callback(bt_gap_cb);
+    
+    esp_avrc_ct_init();
+    esp_avrc_ct_register_callback(bt_app_rc_ct_cb);
+
+    esp_avrc_rn_evt_cap_mask_t evt_set = {0};
+    esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &evt_set, ESP_AVRC_RN_VOLUME_CHANGE);
+    ESP_ERROR_CHECK(esp_avrc_tg_set_rn_evt_cap(&evt_set));
+
+    esp_a2d_register_callback(esp_a2d_cb);
+    esp_a2d_source_register_data_callback(send_audio);
+
+    esp_a2d_source_init();
+
+    esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 }
 
 void setup_ble() {
@@ -85,7 +114,6 @@ void mount_sdcard() {
 
     printf("SD card mount return: %d\n", esp_vfs_fat_sdspi_mount("/sdcard", &sdhost, &sddev, &sdmount_config, &card));
     sdmmc_card_print_info(stdout, card);
-
 }
 
 void app_main(void)
@@ -152,17 +180,76 @@ void app_main(void)
 
     i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
     i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
-    i2c_master_transmit();
+    
+    uint8_t reset[2] = {*mpu_addr, 0};
+    uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
+
+    i2c_master_transmit(mpu_handle, reset, 2, -1);
+    i2c_master_transmit(mpu_handle, cfg, 2, -1);
 
     mount_sdcard();
     start_bluetooth();
     setup_ble();
+
+    xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
 }
 
 void cycle_unlocked() {
-    uart_write_bytes(UART_NUM_2, ".unlocked", 9);
+    uart_write_bytes(UART_NUM_2, ".unlocked\n", 10);
+    vTaskDelete(motion_task);
 }
 
 void cycle_locked() {
-    uart_write_bytes(UART_NUM_2, ".locked", 7);
+    uart_write_bytes(UART_NUM_2, ".locked\n", 8);
+    xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
+}
+
+void monitor_motion(void*) {
+    uint8_t raw[6];
+    while(1) {
+        int16_t accel[3];
+        i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1);
+
+        *accel = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) * 10 / 4096.00; 
+        accel[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) * 10 / 4096.00;
+        accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
+
+        double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
+
+        if (ABS(net_a - 10) >= 0.85) {
+            if(alert_time) {
+                alert_time = time(NULL);
+            }
+            else if (turb_time) {
+                if (time(NULL) - turb_time >= 2) {
+                    trigger_alarm();
+                    uart_write_bytes(UART_NUM_2, ".alert\n", 7);
+                    alert_time = time(NULL);
+                };
+            } else {
+                turb_time = time(NULL);
+            }
+        } else {
+            if (alert_time) {
+                if (time(NULL) - alert_time >= 9) {
+                    turb_stop = 0;
+                    turb_time = 0;
+                    alert_time = 0;
+                    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+                }
+            } 
+            else if (turb_stop) {
+                if (time(NULL) - turb_stop >= 3) {
+                    turb_stop = 0;
+                    turb_time = 0;
+                    alert_time = 0;
+                }
+            }
+            else if (turb_time) {
+                turb_stop = time(NULL);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(25));
+    }
+    vTaskDelete(NULL);
 }
