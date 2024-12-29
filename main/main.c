@@ -15,13 +15,11 @@
 #include "driver/uart.h"
 #include "driver/i2s_std.h"
 #include "driver/i2c_master.h"
-#include "driver/adc.h"
+#include "esp_adc/adc_continuous.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
 #include "freertos/task.h"
-
-#include "lwip/sockets.h"
 
 #include "ble/main.h"
 #include "utils/main.h"
@@ -33,6 +31,8 @@
 i2s_chan_handle_t i2s_rx;
 i2c_master_bus_handle_t mpu_bus;
 i2c_master_dev_handle_t mpu_handle;
+
+adc_continuous_handle_t adc_handle;
 
 uint8_t mpu_addr[3] = {0x6B, 0x1C, 0x3B};
 
@@ -48,6 +48,7 @@ uint8_t cruise = 0;
 void cycle_locked();
 void cycle_unlocked();
 void monitor_motion(void*);
+bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data);
 
 void start_bluetooth() {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -86,8 +87,40 @@ void setup_ble() {
     esp_ble_gatt_set_local_mtu(200);
 }
 
-void event_handler_registry() {
+void setup_adc() {
+    adc_continuous_handle_cfg_t handle_cfg = {
+        .max_store_buf_size = 1024,
+        .conv_frame_size = 10,
+    };
 
+    adc_continuous_new_handle(&handle_cfg, &adc_handle);
+
+    adc_continuous_config_t adc_cfg = {
+        .format = ADC_DIGI_OUTPUT_FORMAT_TYPE1,
+        .conv_mode = ADC_CONV_SINGLE_UNIT_1,
+        .sample_freq_hz = 20000,
+        .pattern_num = 2,
+    };
+
+    adc_digi_pattern_config_t adc_pattern[2];
+
+    for (int i = 0; i < 2; i++) {
+        uint8_t adc_unit, adc_channel;
+        adc_continuous_io_to_channel(i? 36 : 39, &adc_unit, &adc_channel); 
+        adc_pattern[i].atten = ADC_ATTEN_DB_12;
+        adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+        adc_pattern[i].channel = adc_channel;
+        adc_pattern[i].unit = adc_unit;
+    };
+
+    adc_cfg.adc_pattern = adc_pattern;
+    adc_continuous_config(adc_handle, &adc_cfg);
+
+    adc_continuous_evt_cbs_t adc_cbs = {
+        .on_conv_done = adc_cb,
+    };
+
+    adc_continuous_register_event_callbacks(adc_handle, &adc_cbs, NULL);
 }
 
 void mount_sdcard() {
@@ -160,7 +193,7 @@ void app_main(void)
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_DEFAULT
+        .source_clk = UART_SCLK_DEFAULT,
     };
 
     uart_driver_install(UART_NUM_2, 512, 0, 0, NULL, 0);
@@ -191,9 +224,12 @@ void app_main(void)
     i2c_master_transmit(mpu_handle, reset, 2, -1);
     i2c_master_transmit(mpu_handle, cfg, 2, -1);
 
+    setup_adc();
     mount_sdcard();
     start_bluetooth();
     setup_ble();
+
+    adc_continuous_start(adc_handle);
 
     xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
 }
@@ -209,13 +245,20 @@ void cycle_unlocked() {
 void cycle_locked() {
     unlocked = 0;
     cruise = 0;
+    i2s_handle_set(NULL);
     uart_write_bytes(UART_NUM_2, ".locked\n", 8);
 }
 
 void process_cmd(const char* cmd) {
-    if(strcpy(cmd, "audio_play") == 0) {
-        cruise = 1;
-        cruise_mode();
+    if(strcmp(cmd, "audio_play") == 0) {
+        if(!cruise) {
+            cruise = 1;
+            cruise_mode();
+        } else {
+            clear_playlist(0);
+        }
+        i2s_handle_set(&i2s_rx);
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     }
 }
 
@@ -229,27 +272,34 @@ void monitor_motion(void*) {
 
     while(1) {
 
-        uint8_t d;
-        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 20);
-        
-        if(cmd_start) {
-            if (d == '\n') {
-                cmd_start = 0;
-                uart_cmd = realloc(uart_cmd, cmd_len+1);
-                uart_cmd[cmd_len] = 0;
-                cmd_len = 0;
-                process_cmd(uart_cmd);
-                free(uart_cmd);
-                uart_cmd = malloc(0);
-            } else {
-                uart_cmd = realloc(uart_cmd, cmd_len+1);
-                uart_cmd[cmd_len++] = d;
+        if(unlocked) {
+            uint8_t d;
+            int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 5 / portTICK_PERIOD_MS);
+            
+            if(cmd_start) {
+                if (read_len < 1) {
+                    cmd_start = 0;
+                    free(uart_cmd);
+                    uart_cmd = malloc(0);
+                    cmd_len = 0;
+                }
+                else if (d == '\n') {
+                    cmd_start = 0;
+                    uart_cmd = realloc(uart_cmd, cmd_len+1);
+                    uart_cmd[cmd_len] = 0;
+                    cmd_len = 0;
+                    process_cmd((const char*)uart_cmd);
+                    free(uart_cmd);
+                    uart_cmd = malloc(0);
+                } else {
+                    uart_cmd = realloc(uart_cmd, cmd_len+1);
+                    uart_cmd[cmd_len++] = d;
+                }
             }
-        }
-
-        if (read_len && d == '.') {
-            cmd_start = 1;
-        }
+            if (read_len && d == '.') {
+                cmd_start = 1;
+            }
+        };
 
         if(!cruise) {
             int16_t accel[3];
@@ -311,4 +361,10 @@ void monitor_motion(void*) {
     }
     free(uart_cmd);
     vTaskDelete(NULL);
+}
+
+bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data)
+{
+    adc_digi_output_data_t* res = data->conv_frame_buffer;
+    printf(": %d\n", res->type1.data);
 }

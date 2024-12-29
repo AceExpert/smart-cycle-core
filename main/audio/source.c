@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "driver/i2s_std.h"
+
 #include "esp_bt.h"
 #include "esp_gap_bt_api.h"
 #include "esp_a2dp_api.h"
@@ -12,7 +14,13 @@
 FILE* play_file = NULL;
 struct local_playlist* playlist = NULL;
 
+i2s_chan_handle_t* i2s_chan;
+
 static esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
+
+void i2s_handle_set(i2s_chan_handle_t* chan) {
+    i2s_chan = chan;
+}
 
 void add_playlist(const char* path, uint8_t repeat) {
     struct local_playlist* new_play = malloc(sizeof(struct local_playlist));
@@ -184,6 +192,9 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
             }
         }
         return fread(buf, 1, len, play_file);
+    } else if (i2s_chan) {
+        i2s_channel_read(&i2s_chan, buf, len, NULL, pdMS_TO_TICKS(10));
+        return len;
     }
     return 0;
 };

@@ -20,3 +20,4 @@ void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param
 void add_playlist(const char* path, uint8_t repeat);
 void clear_playlist(int index);
 void cruise_mode();
+void i2s_handle_set(i2s_chan_handle_t* chan);
