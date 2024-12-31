@@ -45,9 +45,56 @@ time_t turb_stop = 0;
 uint8_t unlocked = 0;
 uint8_t cruise = 0;
 
+clock_t force_start[2] = {0, 0};
+clock_t tap_end[2] = {0, 0};
+clock_t last_tap[2] = {0, 0};
+int taps[2] = {0, 0};
+
+enum MEDIA_CONTROLS {
+    PREV = 0,
+    NEXT,
+    PLAY_PAUSE,
+    VOL_UP,
+    VOL_DOWN,
+    VOL_STOP,
+    JOIN,
+};
+
+struct media_cmd {
+    int ctrl;
+    double value;
+    struct media_cmd* next;
+};
+
+struct media_cmd* media_cmds = NULL;
+
+void add_media(struct media_cmd** media_q, int ctrl, double value) {
+    if(media_q) {
+        struct media_cmd* new_media = malloc(sizeof(struct media_cmd));
+        new_media->ctrl = ctrl;
+        new_media->value = value;
+        new_media->next = NULL;
+
+        if(*media_q) {
+            (*media_q)->next = new_media;
+        } else {
+            *media_q = new_media;
+        }
+    }
+}
+
+void pop_media(struct media_cmd** media_q) {
+    if(media_q && *media_q) {
+        struct media_cmd* temp = (*media_q)->next;
+        free(*media_q);
+        *media_q = temp;
+    }
+}
+
 void cycle_locked();
 void cycle_unlocked();
 void monitor_motion(void*);
+void media_ctrl_exec(void*);
 bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data);
 
 void start_bluetooth() {
@@ -90,7 +137,8 @@ void setup_ble() {
 void setup_adc() {
     adc_continuous_handle_cfg_t handle_cfg = {
         .max_store_buf_size = 1024,
-        .conv_frame_size = 10,
+        .conv_frame_size = SOC_ADC_DIGI_DATA_BYTES_PER_CONV,
+        .flags.flush_pool = 1,
     };
 
     adc_continuous_new_handle(&handle_cfg, &adc_handle);
@@ -99,18 +147,18 @@ void setup_adc() {
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE1,
         .conv_mode = ADC_CONV_SINGLE_UNIT_1,
         .sample_freq_hz = 20000,
-        .pattern_num = 2,
+        .pattern_num = 1,
     };
 
-    adc_digi_pattern_config_t adc_pattern[2];
+    adc_digi_pattern_config_t adc_pattern[2] = {0};
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 1; i < 2; i++) {
         uint8_t adc_unit, adc_channel;
         adc_continuous_io_to_channel(i? 36 : 39, &adc_unit, &adc_channel); 
-        adc_pattern[i].atten = ADC_ATTEN_DB_12;
-        adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-        adc_pattern[i].channel = adc_channel;
-        adc_pattern[i].unit = adc_unit;
+        adc_pattern[0].atten = ADC_ATTEN_DB_12;
+        adc_pattern[0].channel = adc_channel;
+        adc_pattern[0].unit = adc_unit;
+        adc_pattern[0].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     };
 
     adc_cfg.adc_pattern = adc_pattern;
@@ -166,7 +214,7 @@ void app_main(void)
         nvs_flash_init();
     }
 
-    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
     i2s_std_config_t i2s_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
@@ -215,23 +263,24 @@ void app_main(void)
         .scl_speed_hz = 100000,
     };
 
-    i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
+    /*i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
     i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
     
     uint8_t reset[2] = {*mpu_addr, 0};
     uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
 
     i2c_master_transmit(mpu_handle, reset, 2, -1);
-    i2c_master_transmit(mpu_handle, cfg, 2, -1);
+    i2c_master_transmit(mpu_handle, cfg, 2, -1);*/
 
     setup_adc();
-    mount_sdcard();
+    //mount_sdcard();
     start_bluetooth();
     setup_ble();
 
     adc_continuous_start(adc_handle);
 
-    xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
+    //xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
+    xTaskCreate(media_ctrl_exec, "adc_read", 1024*3, NULL, 5, NULL);
 }
 
 void cycle_unlocked() {
@@ -240,6 +289,7 @@ void cycle_unlocked() {
     add_playlist("/sdcard/startup.pcm", 0);
     add_playlist("/sdcard/standby.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+    adc_continuous_start(adc_handle);
 }
 
 void cycle_locked() {
@@ -247,6 +297,7 @@ void cycle_locked() {
     cruise = 0;
     i2s_handle_set(NULL);
     uart_write_bytes(UART_NUM_2, ".locked\n", 8);
+    adc_continuous_stop(adc_handle);
 }
 
 void process_cmd(const char* cmd) {
@@ -354,7 +405,7 @@ void monitor_motion(void*) {
         };
 
         if(cruise) {
-
+            
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -363,8 +414,99 @@ void monitor_motion(void*) {
     vTaskDelete(NULL);
 }
 
+double avg(adc_digi_output_data_t* readings, uint32_t len) {
+    long sum = 0;
+    for(int i = 0; i < len; i++) sum += readings[i].type1.data;
+    return (double)sum / len;
+}
+
+void media_ctrl_exec(void*){
+    while(1) {
+        while(media_cmds) {
+            switch (media_cmds->ctrl)
+            {
+            case PREV:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 5, ".prev", false);
+                break;
+            
+            case NEXT:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 5, ".next", false);
+
+                break;
+
+            case PLAY_PAUSE:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 5, ".play", false);
+
+                break;
+
+            case VOL_UP:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 7, ".vol_up", false);
+
+                break;
+
+            case VOL_DOWN:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 9, ".vol_down", false);
+
+                break;
+
+            case VOL_STOP:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 9, ".vol_stop", false);
+
+                break;
+
+            default:
+                break;
+            }
+            pop_media(&media_cmds);
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    vTaskDelete(NULL);
+}
+
 bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data)
 {
-    adc_digi_output_data_t* res = data->conv_frame_buffer;
-    printf(": %d\n", res->type1.data);
+    adc_digi_output_data_t* final_data = data->conv_frame_buffer;
+
+    double final_val = final_data->type1.data;
+
+    int gpio_num;
+    adc_continuous_channel_to_io(ADC_UNIT_1, final_data->type1.channel, &gpio_num);
+
+    int i = (int)(gpio_num == 39);
+    int j = (int)(gpio_num != 39);
+
+    if(final_val < 3801 && !force_start[i]) {
+        tap_end[i] = 0;
+        force_start[i] = clock();
+    } else if (clock() - force_start[i] >= 400 && final_val < 3801) {
+        add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
+    };
+
+    if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
+        if(taps[i] <= 2 && !taps[j]) { 
+            if(taps == 1)
+                add_media(&media_cmds, i? NEXT : PREV, 0);
+            tap_end[i] = 0;
+            taps[i] = 0;
+        } else if (taps[i] == 1 && taps[j] == 1) {
+            add_media(&media_cmds, PLAY_PAUSE, 0);
+            tap_end[i] = 0;
+            taps[i] = 0;
+            tap_end[j] = 0;
+            taps[j] = 0;
+        };
+    }
+
+    if(force_start[i] && final_val > 4000 && !tap_end[i]) {
+        clock_t diff = clock() - force_start[i];
+        if(diff <= 300 && diff >= 15) {
+            taps[i]++;
+            tap_end[i] = clock();
+        } else if (diff >= 400) {
+            add_media(&media_cmds, VOL_STOP, 0);
+        }
+        force_start[i] = 0;
+    }
+    return false;
 }
