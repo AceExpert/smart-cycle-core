@@ -76,7 +76,11 @@ void add_media(struct media_cmd** media_q, int ctrl, double value) {
         new_media->next = NULL;
 
         if(*media_q) {
-            (*media_q)->next = new_media;
+            struct media_cmd* current = *media_q;
+            while(current->next) {
+                current = current->next;
+            }
+            current->next = new_media;
         } else {
             *media_q = new_media;
         }
@@ -280,7 +284,7 @@ void app_main(void)
     adc_continuous_start(adc_handle);
 
     //xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
-    xTaskCreate(media_ctrl_exec, "adc_read", 1024*3, NULL, 5, NULL);
+    xTaskCreate(media_ctrl_exec, "media_ctrl_task", 1024*3, NULL, 5, NULL);
 }
 
 void cycle_unlocked() {
@@ -325,7 +329,7 @@ void monitor_motion(void*) {
 
         if(unlocked) {
             uint8_t d;
-            int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 5 / portTICK_PERIOD_MS);
+            int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
             
             if(cmd_start) {
                 if (read_len < 1) {
