@@ -63,7 +63,7 @@ void read_gps(TimerHandle_t timer) {
                 tag = realloc(tag, t_len+1);
                 if(t_len >= 6) {
                     if(data == '\n') {
-                        tag[t_len++] = '\0';
+                        tag[t_len++] = 0;
                         break;
                     };
                 };

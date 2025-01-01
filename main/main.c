@@ -23,10 +23,14 @@
 
 #include "gps/gps.h"
 #include "utils/main.h"
+#include "audio/sink.h"
 
 i2s_chan_handle_t i2s_tx;
+i2s_chan_handle_t mic_rx;
 
-const char* WIFI_SSID[] = {"GUEST_SECURED", "STUDENT_SECURED", "CAMPUS_SECURED", "ACADEMIC_SECURED", "Academic"};
+TaskHandle_t* uart_task;
+
+const char* WIFI_SSID[] = {"GUEST_SECURED", "LBS", "STUDENT_SECURED", "CAMPUS_SECURED", "ACADEMIC_SECURED", "Academic"};
 const char* WIFI_USER = "24IM10016";
 const uint8_t USER_LEN = 9;
 const char* WIFI_PSWD = "Anshul@7329";
@@ -40,6 +44,8 @@ void reconnect(TimerHandle_t timer);
 void send_gps(const char* tag, struct gps_info gpsinfo);
 void on_gps_connected(int phone_sock);
 void on_gps_disconnected(int phone_sock);
+void uart_cmd_task(void*);
+void process_cmd(const char*);
 
 TimerHandle_t reconnect_timer = NULL;
 TimerHandle_t gps_server_auth = NULL;
@@ -133,6 +139,14 @@ void start_bluetooth() {
 
     esp_bt_gap_set_security_param(param_type, &iocap, sizeof(uint8_t));
     esp_bt_gap_set_pin(pin_type, 0, pin_code);
+
+    esp_bt_gap_set_device_name("Cytroid Speaker");
+    
+    esp_bt_gap_register_callback(bt_gap_cb);
+    esp_hf_client_register_callback(hf_client_cb);
+    esp_hf_client_init();
+
+    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 }
 
 void setup_wifi() {
@@ -180,14 +194,16 @@ void app_main(void)
     esp_netif_t* sta_int = esp_netif_create_default_wifi_sta();
 
     i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    i2s_chan_config_t i2s_rx_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+
     i2s_std_config_t i2s_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
-            .bclk = 12,
-            .dout = 14,
-            .ws = 27,
+            .bclk = 19,
+            .dout = 18,
+            .ws = 5,
             .din = I2S_GPIO_UNUSED,
             .invert_flags = {
                 .bclk_inv = false,
@@ -196,9 +212,27 @@ void app_main(void)
             }
         }
     };
+    i2s_std_config_t i2s_rx_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),
+        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .gpio_cfg = {
+            .mclk = I2S_GPIO_UNUSED,
+            .bclk = 14,
+            .din = 12,
+            .ws = 13,
+            .dout = I2S_GPIO_UNUSED,
+            .invert_flags = {
+                .bclk_inv = false,
+                .mclk_inv = false,
+                .ws_inv = false
+            }
+        }
+    };
     i2s_new_channel(&i2s_chan_cfg, &i2s_tx, NULL);
+    i2s_new_channel(&i2s_rx_chan_cfg, NULL, &mic_rx);
+
     i2s_channel_init_std_mode(i2s_tx, &i2s_cfg);
-    i2s_channel_enable(i2s_tx);
+    i2s_channel_init_std_mode(mic_rx, &i2s_rx_cfg);
 
     uart_config_t main_uart = {
         .baud_rate = 115200,
@@ -213,9 +247,12 @@ void app_main(void)
     uart_param_config(UART_NUM_2, &main_uart);
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
     
+    set_i2s_tx_chan(&i2s_tx);
     setup_wifi();
     start_bluetooth();
     setup_gps();
+
+    xTaskCreate(uart_cmd_task, "uart_cmd_task", 1024*3, NULL, 4, uart_task);
 }
 
 void send_gps(const char* tag, struct gps_info gpsinfo) {
@@ -230,6 +267,53 @@ void on_gps_connected(int phone_sock) {
 
 void on_gps_disconnected(int phone_sock) {
     gps_stop_reading();
+}
+
+void process_cmd(const char* cmd) {
+    if(strcmp(cmd, "") == 0) {
+
+    }
+}
+
+void uart_cmd_task(void*) {
+    uint8_t* uart_cmd = malloc(0);
+    int cmd_len = 0;
+    
+    uint8_t cmd_start = 0;
+
+    while(1) {
+
+        uint8_t d;
+        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
+            
+        if(cmd_start) {
+            if (read_len < 1) {
+                cmd_start = 0;
+                free(uart_cmd);
+                uart_cmd = malloc(0);
+                cmd_len = 0;
+            }
+            else if (d == '\n') {
+                cmd_start = 0;
+                uart_cmd = realloc(uart_cmd, cmd_len+1);
+                uart_cmd[cmd_len] = 0;
+                cmd_len = 0;
+                process_cmd((const char*)uart_cmd);
+                free(uart_cmd);
+                uart_cmd = malloc(0);
+            } else {
+                uart_cmd = realloc(uart_cmd, cmd_len+1);
+                uart_cmd[cmd_len++] = d;
+            }
+        }
+        if (read_len && d == '.') {
+            cmd_start = 1;
+        }
+        if(!cmd_start)
+            vTaskDelay(pdMS_TO_TICKS(20));
+    };
+    vTaskDelete(NULL);
+    free(uart_cmd);
 }
 
 void ip_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -268,7 +352,7 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
         
         for(int i = 0; i < num; i++) {
             //printf("%s: RSSI: %d\n", ap_records[i].ssid, ap_records[i].rssi);            
-            for(int j = 0; j < 5; j++) {
+            for(int j = 0; j < 6; j++) {
                 if(strcmp((const char*)(ap_records[i].ssid), "GUEST_SECURED") == 0 && ap_records[i].rssi > -100) {
                     strcpy(best_ssid, "GUEST_SECURED");
                     break;
@@ -293,16 +377,13 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
             },
         };
 
-        strcpy((const char*)(ap_config.sta.ssid), "CyberSky");
+        strcpy((const char*)(ap_config.sta.ssid), best_ssid);
 
         if(strcmp(best_ssid, "Academic") == 0) {
             esp_wifi_sta_enterprise_disable();
         } else {
             esp_wifi_sta_enterprise_enable();
         };
-
-        strcpy((const char*)(ap_config.sta.password), "hotspot.jio");
-        esp_wifi_sta_enterprise_disable();
 
         esp_wifi_set_config(WIFI_IF_STA, &ap_config);
         esp_wifi_connect();
