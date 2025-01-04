@@ -132,6 +132,11 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
             esp_ble_gatts_send_response(itf, param->write.conn_id, param->write.trans_id, 0, NULL);
             printf("notif\n");
         } else {
+            char test[200];
+            strcpy(test, (const char*)param->write.value);
+
+            printf("%s\n", test);
+
             struct split_result res[10];
             int size = split(param->write.value, param->write.len, ' ', res);
             
@@ -186,6 +191,9 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                     } else if (match("audio_connect", res[1].text, 13, res[1].len)) {
                         char cmd[23] = ".audio_connect ";
                         strcat(cmd, (const char*)param->write.bda);
+                        printf("audio connect: ");
+                        for(int i = 0; i < 6; i++) printf("%x:", param->write.bda[i]);
+                        printf("\n");
                         cmd[21] = '\n';
                         uart_write_bytes(UART_NUM_2, cmd, 22);
                     } else if (match("audio_disconn", res[1].text, 13, res[1].len)) {
@@ -193,6 +201,8 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                     }
                 };
             }
+
+            for(int j = 0; j < size; j++) free(res[j].text);
         }
         break;
     }
