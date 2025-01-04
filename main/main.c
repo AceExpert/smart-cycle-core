@@ -276,12 +276,12 @@ void app_main(void)
     i2c_master_transmit(mpu_handle, reset, 2, -1);
     i2c_master_transmit(mpu_handle, cfg, 2, -1);*/
 
-    setup_adc();
-    //mount_sdcard();
+    //setup_adc();
+    mount_sdcard();
     start_bluetooth();
     setup_ble();
 
-    adc_continuous_start(adc_handle);
+    //adc_continuous_start(adc_handle);
 
     //xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
     xTaskCreate(media_ctrl_exec, "media_ctrl_task", 1024*3, NULL, 5, NULL);
@@ -290,10 +290,10 @@ void app_main(void)
 void cycle_unlocked() {
     unlocked = 1;
     uart_write_bytes(UART_NUM_2, ".unlocked\n", 10);
-    add_playlist("/sdcard/startup.pcm", 0);
+    /*add_playlist("/sdcard/startup.pcm", 0);
     add_playlist("/sdcard/standby.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    adc_continuous_start(adc_handle);
+    adc_continuous_start(adc_handle);*/
 }
 
 void cycle_locked() {
@@ -430,31 +430,31 @@ void media_ctrl_exec(void*){
             switch (media_cmds->ctrl)
             {
             case PREV:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 5, ".prev", false);
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".prev", false);
                 break;
             
             case NEXT:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 5, ".next", false);
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".next", false);
 
                 break;
 
             case PLAY_PAUSE:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 5, ".play", false);
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".play", false);
 
                 break;
 
             case VOL_UP:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 7, ".vol_up", false);
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 7, (const uint8_t*)".vol_up", false);
 
                 break;
 
             case VOL_DOWN:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 9, ".vol_down", false);
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (const uint8_t*)".vol_down", false);
 
                 break;
 
             case VOL_STOP:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->descr_handle, 9, ".vol_stop", false);
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (const uint8_t*)".vol_stop", false);
 
                 break;
 
