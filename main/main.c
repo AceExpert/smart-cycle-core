@@ -285,6 +285,7 @@ void on_gps_disconnected(int phone_sock) {
 }
 
 void process_cmd(const char* cmd) {
+    printf("%s\n", cmd);
     if(strcmp(cmd, "alert") == 0) {
         if(!alert_timer)
             alert_timer = xTimerCreate("alert_timer", pdMS_TO_TICKS(8000), pdTRUE, NULL, send_alert);
@@ -299,7 +300,8 @@ void process_cmd(const char* cmd) {
         if(len == 2 && match("audio_connect", parts[0].text, 13, parts[0].len)) {
             esp_a2d_sink_connect((uint8_t*)parts[1].text);
             esp_hf_client_connect((uint8_t*)parts[1].text);
-        }
+        };
+        for(int i = 0; i < len; i++) free(parts[i].text);
     }
 }
 
