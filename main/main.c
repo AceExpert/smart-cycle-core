@@ -12,6 +12,9 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 
+#include "esp_bt.h"
+#include "esp_bt_main.h"
+
 #include "driver/gpio.h"
 #include "driver/i2s_std.h"
 
@@ -49,10 +52,10 @@ void process_cmd(const char*);
 
 TimerHandle_t reconnect_timer = NULL;
 TimerHandle_t gps_server_auth = NULL;
+TimerHandle_t alert_timer = NULL;
 
 int phone_socket = 0;
 uint8_t phone_connected = 0;
-
 
 static char* SERV_TOKEN = "auth 1234";
 
@@ -141,9 +144,14 @@ void start_bluetooth() {
     esp_bt_gap_set_pin(pin_type, 0, pin_code);
 
     esp_bt_gap_set_device_name("Cytroid Speaker");
-    
+
     esp_bt_gap_register_callback(bt_gap_cb);
+
+    esp_a2d_register_callback(esp_a2d_cb);
+    esp_a2d_sink_register_data_callback(recv_audio);
     esp_hf_client_register_callback(hf_client_cb);
+    
+    esp_a2d_sink_init();
     esp_hf_client_init();
 
     esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
@@ -261,6 +269,13 @@ void send_gps(const char* tag, struct gps_info gpsinfo) {
     };
 }
 
+void send_alert(TimerHandle_t timer) {
+    if(phone_connected) {
+        send(phone_socket, "$alert\n", 7, 0);
+        xTimerStop(timer, portMAX_DELAY);
+    };
+}
+
 void on_gps_connected(int phone_sock) {
     gps_start_reading();
 }
@@ -270,8 +285,21 @@ void on_gps_disconnected(int phone_sock) {
 }
 
 void process_cmd(const char* cmd) {
-    if(strcmp(cmd, "") == 0) {
-
+    if(strcmp(cmd, "alert") == 0) {
+        if(!alert_timer)
+            alert_timer = xTimerCreate("alert_timer", pdMS_TO_TICKS(8000), pdTRUE, NULL, send_alert);
+        if(phone_connected) {
+            send(phone_socket, "$alert\n", 7, 0);
+        } else {
+            xTimerReset(alert_timer, portMAX_DELAY);
+        };
+    } else {
+        struct split_result parts[5];
+        int len = split((unsigned const char*)cmd, strlen(cmd), ' ', parts);
+        if(len == 2 && match("audio_connect", parts[0].text, 13, parts[0].len)) {
+            esp_a2d_sink_connect((uint8_t*)parts[1].text);
+            esp_hf_client_connect((uint8_t*)parts[1].text);
+        }
     }
 }
 
@@ -377,7 +405,7 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
             },
         };
 
-        strcpy((const char*)(ap_config.sta.ssid), best_ssid);
+        strcpy((char*)(ap_config.sta.ssid), best_ssid);
 
         if(strcmp(best_ssid, "Academic") == 0) {
             esp_wifi_sta_enterprise_disable();

@@ -124,15 +124,15 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         }
         break;
     };
-    default {
+    default: {
         break;
     };
     };
 };
 
 void recv_audio(const uint8_t* buf, uint32_t len) {
-    if (buf == NULL || len == 0) return 0;
-    i2s_channel_write(tx_chan, buf, len, NULL, pdMS_TO_TICKS(20));
+    if (buf == NULL || len == 0) return;
+    i2s_channel_write(*tx_chan, buf, len, NULL, pdMS_TO_TICKS(20));
 };
 
 static uint32_t hf_send_audio(uint8_t *buf, uint32_t len)
