@@ -154,7 +154,7 @@ void start_bluetooth() {
     esp_a2d_sink_init();
     esp_hf_client_init();
 
-    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
 }
 
 void setup_wifi() {
