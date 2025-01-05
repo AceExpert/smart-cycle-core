@@ -26,7 +26,7 @@
 #include "audio/source.h"
 
 #define MPU_VALUE(b2, b1) ((int16_t)(((b2) >> 7) ? ~((b2) << 8 | (b1)) : ((b2) << 8 | (b1))))
-#define ABS(a) (((a) > 0) ? (a) : -(a))
+#define ABS(a) (((a) > 0) ? (a) : (-(a)))
 
 i2s_chan_handle_t i2s_rx;
 i2c_master_bus_handle_t mpu_bus;
@@ -97,6 +97,7 @@ void pop_media(struct media_cmd** media_q) {
 
 void cycle_locked();
 void cycle_unlocked();
+void on_speaker_connect();
 void monitor_motion(void*);
 void media_ctrl_exec(void*);
 bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data);
@@ -118,6 +119,8 @@ void start_bluetooth() {
     esp_avrc_rn_evt_cap_mask_t evt_set = {0};
     esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &evt_set, ESP_AVRC_RN_VOLUME_CHANGE);
     ESP_ERROR_CHECK(esp_avrc_tg_set_rn_evt_cap(&evt_set));
+
+    set_on_speaker_connect(on_speaker_connect);
 
     esp_a2d_register_callback(esp_a2d_cb);
     esp_a2d_source_register_data_callback(send_audio);
@@ -267,33 +270,35 @@ void app_main(void)
         .scl_speed_hz = 100000,
     };
 
-    /*i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
+    i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
     i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
     
     uint8_t reset[2] = {*mpu_addr, 0};
     uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
 
     i2c_master_transmit(mpu_handle, reset, 2, -1);
-    i2c_master_transmit(mpu_handle, cfg, 2, -1);*/
+    i2c_master_transmit(mpu_handle, cfg, 2, -1);
 
-    //setup_adc();
+    setup_adc();
     mount_sdcard();
     start_bluetooth();
     setup_ble();
 
-    //adc_continuous_start(adc_handle);
+    xTaskCreate(monitor_motion, "motion_monitor", 3584, NULL, 5, motion_task);
+    //xTaskCreate(media_ctrl_exec, "media_ctrl_task", 1024*3, NULL, 5, NULL);
+}
 
-    //xTaskCreate(monitor_motion, "motion_monitor", 1024*3, NULL, 5, motion_task);
-    xTaskCreate(media_ctrl_exec, "media_ctrl_task", 1024*3, NULL, 5, NULL);
+void on_speaker_connect() {
+    esp_ble_gap_start_advertising(&adv_params);
 }
 
 void cycle_unlocked() {
     unlocked = 1;
     uart_write_bytes(UART_NUM_2, ".unlocked\n", 10);
-    /*add_playlist("/sdcard/startup.pcm", 0);
-    add_playlist("/sdcard/standby.pcm", 1);
+    add_playlist("/sdcard/startup.pcm", 0);
+    //add_playlist("/sdcard/music.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    adc_continuous_start(adc_handle);*/
+    //adc_continuous_start(adc_handle);
 }
 
 void cycle_locked() {
@@ -371,19 +376,21 @@ void monitor_motion(void*) {
                     alert_time = time(NULL);
                 }
                 else if (turb_time) {
-                    if (time(NULL) - turb_time >= (unlocked ? 1 : 2)) {
+                    turb_stop = 0;
+                    if ((time(NULL) - turb_time) >= (unlocked ? 1 : 2)) {
                         if(unlocked) {
                             cruise_mode();
                             cruise = 1;
                         } else {
                             add_playlist("/sdcard/alarm.pcm", 1);
-                            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+                            //esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
                             uart_write_bytes(UART_NUM_2, ".alert\n", 7);
                             alert_time = time(NULL);
                         };
                     };
                 } else {
                     turb_time = time(NULL);
+                    turb_stop = 0;
                 }
             } else {
                 if (alert_time) {
@@ -391,7 +398,7 @@ void monitor_motion(void*) {
                         turb_stop = 0;
                         turb_time = 0;
                         alert_time = 0;
-                        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+                        //esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
                         clear_playlist(0);
                     }
                 } 
@@ -408,11 +415,45 @@ void monitor_motion(void*) {
             }
         };
 
-        if(cruise) {
+        if(cruise && media_cmds) {
+            switch (media_cmds->ctrl)
+            {
+            case PREV:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".prev", false);
+                break;
             
+            case NEXT:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".next", false);
+
+                break;
+
+            case PLAY_PAUSE:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".play", false);
+
+                break;
+
+            case VOL_UP:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 7, (uint8_t*)".vol_up", false);
+
+                break;
+
+            case VOL_DOWN:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (uint8_t*)".vol_down", false);
+
+                break;
+
+            case VOL_STOP:
+                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (uint8_t*)".vol_stop", false);
+
+                break;
+
+            default:
+                break;
+            }
+            pop_media(&media_cmds);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(6));
     }
     free(uart_cmd);
     vTaskDelete(NULL);
@@ -489,7 +530,7 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
 
     if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
         if(taps[i] <= 2 && !taps[j]) { 
-            if(taps == 1)
+            if(taps[i] == 1)
                 add_media(&media_cmds, i? NEXT : PREV, 0);
             tap_end[i] = 0;
             taps[i] = 0;

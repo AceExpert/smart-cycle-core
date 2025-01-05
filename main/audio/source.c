@@ -18,8 +18,16 @@ i2s_chan_handle_t* i2s_chan;
 
 static esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
 
+struct source_callbacks callbacks = {
+    .speaker_connected = NULL,
+};
+
 void i2s_handle_set(i2s_chan_handle_t* chan) {
     i2s_chan = chan;
+}
+
+void set_on_speaker_connect(void (*callb)()) {
+    callbacks.speaker_connected = callb;
 }
 
 void add_playlist(const char* path, uint8_t repeat) {
@@ -133,11 +141,12 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         switch (param->conn_stat.state)
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
+            if(callbacks.speaker_connected) callbacks.speaker_connected();
             printf("Speaker connected.\n");
             esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
-
+            esp_a2d_source_connect(speaker_addr);
             break;
         default: {
             break;
@@ -186,7 +195,8 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
                 if(playlist) {
                     play_file = fopen(playlist->play, "r");
                 } else {
-                    esp_a2d_media_ctrl(ESP_A2D_AUDIO_STATE_SUSPEND);
+                    play_file = NULL;
+                    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
                     return 0;
                 }
             }

@@ -13,6 +13,10 @@ struct local_playlist {
     struct local_playlist* next;
 };
 
+struct source_callbacks {
+    void (*speaker_connected)();
+};
+
 int32_t send_audio(uint8_t* buf, int32_t len);
 void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param);
 void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
@@ -21,3 +25,4 @@ void add_playlist(const char* path, uint8_t repeat);
 void clear_playlist(int index);
 void cruise_mode();
 void i2s_handle_set(i2s_chan_handle_t* chan);
+void set_on_speaker_connect(void (*)());

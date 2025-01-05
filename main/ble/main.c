@@ -77,7 +77,7 @@ void esp_ble_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param)
     switch (event)
     {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
-        esp_ble_gap_start_advertising(&adv_params);
+        //esp_ble_gap_start_advertising(&adv_params);
         break;
     default:
         break;
@@ -130,20 +130,13 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
     case ESP_GATTS_WRITE_EVT: {
         if(param->write.handle == gatts_profile[0].descr_handle) {
             esp_ble_gatts_send_response(itf, param->write.conn_id, param->write.trans_id, 0, NULL);
-            printf("notif\n");
         } else {
-            char test[200];
-            strcpy(test, (const char*)param->write.value);
-
-            printf("%s\n", test);
-
             struct split_result res[10];
             int size = split(param->write.value, param->write.len, ' ', res);
             
             if (xTimerIsTimerActive(auth_timer) != pdFALSE) {
                 if(size == 2) {
                     if(match("auth", res[0].text, 4, res[0].len) && match(TOKEN, res[1].text, 20, res[1].len)) {
-                        printf("authorized\n");
                     } else {
                         esp_ble_gatts_close(gatts_profile[0].gatts_if, gatts_profile[0].conn_id);
                         
@@ -156,7 +149,6 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         cycle_state = UNLOCKED;
                         if(cycle_callbacks.unlocked != NULL) {
                             cycle_callbacks.unlocked();
-                            printf("unlocked\n");
 
                         }
                     } else if(match("lock", res[1].text, 4, res[1].len)) {
@@ -189,11 +181,8 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         direction_indic(-1, 0, 0);
 
                     } else if (match("audio_connect", res[1].text, 13, res[1].len)) {
-                        char cmd[23] = ".audio_connect ";
+                        char cmd[22] = ".audio_connect ";
                         strcat(cmd, (const char*)param->write.bda);
-                        printf("audio connect: ");
-                        for(int i = 0; i < 6; i++) printf("%x:", param->write.bda[i]);
-                        printf("\n");
                         cmd[21] = '\n';
                         uart_write_bytes(UART_NUM_2, cmd, 22);
                     } else if (match("audio_disconn", res[1].text, 13, res[1].len)) {
