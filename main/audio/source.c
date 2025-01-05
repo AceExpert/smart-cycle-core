@@ -230,7 +230,6 @@ void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param
     /* when metadata responded, this event comes */
     case ESP_AVRC_CT_METADATA_RSP_EVT: {
         //ESP_LOGI(BT_RC_CT_TAG, "AVRC metadata response: attribute id 0x%x, %s", param->meta_rsp.attr_id, param->meta_rsp.attr_text);
-        free(param->meta_rsp.attr_text);
         break;
     }
     /* when notification changed, this event comes */

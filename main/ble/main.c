@@ -180,6 +180,8 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                     } else if (match("dir_stop", res[1].text, 8, res[1].len)) {
                         direction_indic(-1, 0, 0);
 
+                    }else if (match("destination", res[1].text, 11, res[1].len)) {
+
                     } else if (match("audio_connect", res[1].text, 13, res[1].len)) {
                         char cmd[22] = ".audio_connect ";
                         strcat(cmd, (const char*)param->write.bda);
