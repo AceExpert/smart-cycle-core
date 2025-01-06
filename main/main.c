@@ -186,6 +186,7 @@ void mount_sdcard() {
     };
 
     sdmmc_host_t sdhost = SDSPI_HOST_DEFAULT();
+    sdhost.slot = 2;
 
     spi_bus_config_t bus_cfg = {
         .miso_io_num = 19,
@@ -193,10 +194,10 @@ void mount_sdcard() {
         .sclk_io_num = 18,
         .max_transfer_sz = 4000,
         .quadhd_io_num = -1,
-        .quadwp_io_num = -1
+        .quadwp_io_num = -1,
     };
 
-    spi_bus_initialize(sdhost.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
+    spi_bus_initialize(sdhost.slot, &bus_cfg, 2);
 
     sdspi_device_config_t sddev = SDSPI_DEVICE_CONFIG_DEFAULT();
     sddev.gpio_cs = 5;
@@ -212,7 +213,7 @@ void app_main(void)
 {
     printf("Cytroid starting...\n");
 
-    gpio_set_direction(GPIO_NUM_27, GPIO_MODE_OUTPUT);
+    gpio_set_direction(27, GPIO_MODE_OUTPUT);
     gpio_set_direction(14, GPIO_MODE_OUTPUT);
 
     esp_err_t ret = nvs_flash_init();
@@ -256,12 +257,12 @@ void app_main(void)
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
 
     i2c_master_bus_config_t mpu_bus_cfg = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .scl_io_num = 22,
-        .sda_io_num = 21,
+        .clk_source = I2C_CLK_SRC_APB,
+        .scl_io_num = 25,
+        .sda_io_num = 26,
         .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = true,
-        .i2c_port = 0,
+        .i2c_port = -1,
     };
 
     i2c_device_config_t mpu_cfg = {
@@ -270,22 +271,21 @@ void app_main(void)
         .scl_speed_hz = 100000,
     };
 
-    i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
+    /*i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
     i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
     
     uint8_t reset[2] = {*mpu_addr, 0};
     uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
 
     i2c_master_transmit(mpu_handle, reset, 2, -1);
-    i2c_master_transmit(mpu_handle, cfg, 2, -1);
+    i2c_master_transmit(mpu_handle, cfg, 2, -1);*/
 
     setup_adc();
     mount_sdcard();
     start_bluetooth();
     setup_ble();
-
-    xTaskCreate(monitor_motion, "motion_monitor", 3584, NULL, 5, motion_task);
-    //xTaskCreate(media_ctrl_exec, "media_ctrl_task", 1024*3, NULL, 5, NULL);
+    
+    xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
 }
 
 void on_speaker_connect() {
@@ -319,6 +319,17 @@ void process_cmd(const char* cmd) {
         }
         i2s_handle_set(&i2s_rx);
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+    } else if (strcmp(cmd, "alert") == 0) {
+        add_playlist("/sdcard/alarm.pcm", 1);
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+    } else if (strcmp(cmd, "cruise") == 0) {
+        if(!cruise) {
+            cruise = 1;
+            cruise_mode();
+        }
+    } else if (strcmp(cmd, "alert_stop") == 0) {
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+        clear_playlist(0);
     }
 }
 
@@ -334,7 +345,7 @@ void monitor_motion(void*) {
 
         if(unlocked) {
             uint8_t d;
-            int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
+            int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 5 / portTICK_PERIOD_MS);
             
             if(cmd_start) {
                 if (read_len < 1) {
@@ -361,58 +372,61 @@ void monitor_motion(void*) {
             }
         };
 
-        if(!cruise) {
+        if(!cruise && false) {
             int16_t accel[3];
-            i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1);
+            if(i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1) == 0) {
 
-            *accel = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) * 10 / 4096.00; 
-            accel[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) * 10 / 4096.00;
-            accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
+                *accel = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) * 10 / 4096.00; 
+                accel[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) * 10 / 4096.00;
+                accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
 
-            double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
-
-            if (ABS(net_a - 10) >= 0.85) {
-                if(alert_time) {
-                    alert_time = time(NULL);
-                }
-                else if (turb_time) {
-                    turb_stop = 0;
-                    if ((time(NULL) - turb_time) >= (unlocked ? 1 : 2)) {
-                        if(unlocked) {
-                            cruise_mode();
-                            cruise = 1;
-                        } else {
-                            add_playlist("/sdcard/alarm.pcm", 1);
-                            //esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-                            uart_write_bytes(UART_NUM_2, ".alert\n", 7);
-                            alert_time = time(NULL);
+                double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
+    
+                if (ABS(net_a - 10) >= 0.85) {
+                    if(alert_time) {
+                        alert_time = time(NULL);
+                    }
+                    else if (turb_time) {
+                        turb_stop = 0;
+                        if ((time(NULL) - turb_time) >= (unlocked ? 1 : 2)) {
+                            if(unlocked) {
+                                cruise_mode();
+                                cruise = 1;
+                            } else {
+                                add_playlist("/sdcard/alarm.pcm", 1);
+                                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+                                uart_write_bytes(UART_NUM_2, ".alert\n", 7);
+                                printf("alert\n");
+                                alert_time = time(NULL);
+                            };
                         };
-                    };
+                    } else {
+                        turb_time = time(NULL);
+                        turb_stop = 0;
+                    }
                 } else {
-                    turb_time = time(NULL);
-                    turb_stop = 0;
-                }
-            } else {
-                if (alert_time) {
-                    if (time(NULL) - alert_time >= 9) {
-                        turb_stop = 0;
-                        turb_time = 0;
-                        alert_time = 0;
-                        //esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
-                        clear_playlist(0);
+                    if (alert_time) {
+                        if (time(NULL) - alert_time >= 9) {
+                            turb_stop = 0;
+                            turb_time = 0;
+                            alert_time = 0;
+                            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+                            printf("alert stop\n");
+                            clear_playlist(0);
+                        }
+                    } 
+                    else if (turb_stop) {
+                        if (time(NULL) - turb_stop >= 3) {
+                            turb_stop = 0;
+                            turb_time = 0;
+                            alert_time = 0;
+                        }
                     }
-                } 
-                else if (turb_stop) {
-                    if (time(NULL) - turb_stop >= 3) {
-                        turb_stop = 0;
-                        turb_time = 0;
-                        alert_time = 0;
+                    else if (turb_time) {
+                        turb_stop = time(NULL);
                     }
                 }
-                else if (turb_time) {
-                    turb_stop = time(NULL);
-                }
-            }
+            };
         };
 
         if(cruise && media_cmds) {
@@ -447,16 +461,16 @@ void monitor_motion(void*) {
 
                 break;
 
-            default:
+            default: {
                 break;
+            };
             }
             pop_media(&media_cmds);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(6));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
     free(uart_cmd);
-    vTaskDelete(NULL);
 }
 
 double avg(adc_digi_output_data_t* readings, uint32_t len) {

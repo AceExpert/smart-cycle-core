@@ -6,10 +6,6 @@
 #include "esp_gatt_common_api.h"
 #include "esp_gatts_api.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/timers.h"
-
 static char* TOKEN = "49n5pEsOUDF25rBhUFmN";
 
 static uint8_t adv_service_uuid128[16] = {

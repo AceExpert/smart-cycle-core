@@ -85,7 +85,7 @@ void cruise_mode() {
         if(strcpy(playlist->play, "/sdcard/startup.pcm") == 0) {
             clear_playlist(1);
         } else {
-            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
+            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
             if(play_file) fclose(play_file);
             clear_playlist(0);
         }
@@ -133,7 +133,7 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     {
     case ESP_A2D_PROF_STATE_EVT: {
         if (param->a2d_prof_stat.init_state == ESP_A2D_INIT_SUCCESS) {
-            //esp_a2d_source_connect(speaker_addr);
+            esp_a2d_source_connect(speaker_addr);
         }
         break;
     }
@@ -196,14 +196,14 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
                     play_file = fopen(playlist->play, "r");
                 } else {
                     play_file = NULL;
-                    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+                    if(i2s_chan == NULL) esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
                     return 0;
                 }
             }
         }
         return fread(buf, 1, len, play_file);
     } else if (i2s_chan) {
-        i2s_channel_read(*i2s_chan, buf, len, NULL, pdMS_TO_TICKS(10));
+        i2s_channel_read(*i2s_chan, buf, len, NULL, pdMS_TO_TICKS(20));
         return len;
     }
     return 0;
