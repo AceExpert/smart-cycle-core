@@ -78,6 +78,11 @@ void clear_playlist(int index) {
         prev->next = current;
     else
         playlist = NULL;
+
+    if(play_file) {
+        fclose(play_file);
+        play_file = NULL;
+    };
 }
 
 void cruise_mode() {
