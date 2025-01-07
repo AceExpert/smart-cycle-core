@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
 #include <time.h>
 #include "nvs.h"
@@ -17,6 +18,7 @@
 
 #include "driver/gpio.h"
 #include "driver/i2s_std.h"
+#include "driver/i2c_master.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
@@ -28,12 +30,27 @@
 #include "utils/main.h"
 #include "audio/sink.h"
 
+#define MPU_VALUE(b2, b1) ((int16_t)(((b2) >> 7) ? ~((b2) << 8 | (b1)) : ((b2) << 8 | (b1))))
+#define ABS(a) (((a) > 0) ? (a) : (-(a)))
+
 i2s_chan_handle_t i2s_tx;
 i2s_chan_handle_t mic_rx;
 
 TaskHandle_t* uart_task;
 
-const char* WIFI_SSID[] = {"GUEST_SECURED", "LBS", "STUDENT_SECURED", "CAMPUS_SECURED", "ACADEMIC_SECURED", "Academic"};
+i2c_master_bus_handle_t mpu_bus;
+i2c_master_dev_handle_t mpu_handle;
+
+uint8_t mpu_addr[3] = {0x6B, 0x1C, 0x3B};
+
+time_t alert_time = 0;
+time_t turb_time = 0;
+time_t turb_stop = 0;
+
+uint8_t cruise = 0;
+uint8_t unlocked = 0;
+
+const char* WIFI_SSID[] = {"GUEST_SECURED", "VS", "LBS", "STUDENT_SECURED", "CAMPUS_SECURED", "ACADEMIC_SECURED", "Academic"};
 const char* WIFI_USER = "24IM10016";
 const uint8_t USER_LEN = 9;
 const char* WIFI_PSWD = "Anshul@7329";
@@ -85,7 +102,7 @@ void gps_server(void*) {
 
     bind(sock, (struct sockaddr*)&cycle_addr, sizeof(cycle_addr));
 
-    listen(sock, 1);
+    listen(sock, 3);
 
     struct sockaddr_in phone_addr;
     socklen_t addr_len = sizeof(phone_addr);
@@ -168,6 +185,8 @@ void setup_wifi() {
     esp_eap_client_set_identity((uint8_t*)WIFI_USER, USER_LEN);
     esp_eap_client_set_username((uint8_t*)WIFI_USER, USER_LEN);
     esp_eap_client_set_password((uint8_t*)WIFI_PSWD, PSWD_LEN);
+
+    esp_eap_client_set_ttls_phase2_method(ESP_EAP_TTLS_PHASE2_MSCHAPV2);
 
     esp_wifi_start();
 }
@@ -254,13 +273,37 @@ void app_main(void)
     uart_driver_install(UART_NUM_2, 512, 0, 0, NULL, 0);
     uart_param_config(UART_NUM_2, &main_uart);
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
+
+    i2c_master_bus_config_t mpu_bus_cfg = {
+        .clk_source = I2C_CLK_SRC_APB,
+        .scl_io_num = 22,
+        .sda_io_num = 21,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+        .i2c_port = -1,
+    };
+
+    i2c_device_config_t mpu_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = 0x68,
+        .scl_speed_hz = 100000,
+    };
+
+    i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
+    i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
     
+    uint8_t reset[2] = {*mpu_addr, 0};
+    uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
+
+    i2c_master_transmit(mpu_handle, reset, 2, -1);
+    i2c_master_transmit(mpu_handle, cfg, 2, -1);
+
     set_i2s_tx_chan(&i2s_tx);
     setup_wifi();
     start_bluetooth();
     setup_gps();
 
-    xTaskCreate(uart_cmd_task, "uart_cmd_task", 1024*3, NULL, 4, uart_task);
+    xTaskCreate(uart_cmd_task, "uart_cmd_task", 3584, NULL, 4, uart_task);
 }
 
 void send_gps(const char* tag, struct gps_info gpsinfo) {
@@ -285,7 +328,6 @@ void on_gps_disconnected(int phone_sock) {
 }
 
 void process_cmd(const char* cmd) {
-    printf("%s\n", cmd);
     if(strcmp(cmd, "alert") == 0) {
         if(!alert_timer)
             alert_timer = xTimerCreate("alert_timer", pdMS_TO_TICKS(8000), pdTRUE, NULL, send_alert);
@@ -294,7 +336,13 @@ void process_cmd(const char* cmd) {
         } else {
             xTimerReset(alert_timer, portMAX_DELAY);
         };
-    } else {
+    } else if (strcmp(cmd, "unlocked") == 0) {
+        unlocked = 1;
+    } else if (strcmp(cmd, "locked") == 0) {
+        unlocked = 0;
+        cruise = 0;
+    }
+    else {
         struct split_result parts[5];
         int len = split((unsigned const char*)cmd, strlen(cmd), ' ', parts);
         if(len == 2 && match("audio_connect", parts[0].text, 13, parts[0].len)) {
@@ -306,6 +354,8 @@ void process_cmd(const char* cmd) {
 }
 
 void uart_cmd_task(void*) {
+    uint8_t raw[6];
+
     uint8_t* uart_cmd = malloc(0);
     int cmd_len = 0;
     
@@ -339,8 +389,65 @@ void uart_cmd_task(void*) {
         if (read_len && d == '.') {
             cmd_start = 1;
         }
+        
+        if(!cruise) {
+            int16_t accel[3];
+            if(i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1) == 0) {
+
+                *accel = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) * 10 / 4096.00; 
+                accel[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) * 10 / 4096.00;
+                accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
+
+                double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
+    
+                if (ABS(net_a - 10) >= 0.85) {
+                    if(alert_time) {
+                        alert_time = time(NULL);
+                    }
+                    else if (turb_time) {
+                        turb_stop = 0;
+                        if ((time(NULL) - turb_time) >= (unlocked ? 1 : 2)) {
+                            if(unlocked) {
+                                cruise = 1;
+                                uart_write_bytes(UART_NUM_2, ".cruise\n", 8);
+                            } else {
+                                process_cmd("alert");
+                                uart_write_bytes(UART_NUM_2, ".alert\n", 7);
+                                //printf("alert\n");
+                                alert_time = time(NULL);
+                            };
+                        };
+                    } else {
+                        turb_time = time(NULL);
+                        turb_stop = 0;
+                    }
+                } else {
+                    if (alert_time) {
+                        if (time(NULL) - alert_time >= 9) {
+                            turb_stop = 0;
+                            turb_time = 0;
+                            alert_time = 0;
+                            uart_write_bytes(UART_NUM_2, ".alert_stop\n", 12);
+                            //printf("alert stop\n");
+                        }
+                    } 
+                    else if (turb_stop) {
+                        if (time(NULL) - turb_stop >= 3) {
+                            turb_stop = 0;
+                            turb_time = 0;
+                            alert_time = 0;
+                        }
+                    }
+                    else if (turb_time) {
+                        turb_stop = time(NULL);
+                    }
+                }
+            };
+        };
+
         if(!cmd_start)
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(7));
+
     };
     vTaskDelete(NULL);
     free(uart_cmd);
@@ -382,11 +489,11 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
         
         for(int i = 0; i < num; i++) {
             //printf("%s: RSSI: %d\n", ap_records[i].ssid, ap_records[i].rssi);            
-            for(int j = 0; j < 6; j++) {
-                if(strcmp((const char*)(ap_records[i].ssid), "GUEST_SECURED") == 0 && ap_records[i].rssi > -100) {
+            for(int j = 0; j < 7; j++) {
+                /*if(strcmp((const char*)(ap_records[i].ssid), "GUEST_SECURED") == 0 && ap_records[i].rssi > -100) {
                     strcpy(best_ssid, "GUEST_SECURED");
                     break;
-                }
+                }*/
                 if(strcmp((const char*)(ap_records[i].ssid), WIFI_SSID[j]) == 0) {
                     if(ap_records[i].rssi > rssi_best) {
                         strcpy(best_ssid, WIFI_SSID[j]);
@@ -414,6 +521,9 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
         } else {
             esp_wifi_sta_enterprise_enable();
         };
+
+        strcpy((char*)(ap_config.sta.password), WIFI_PSWD);
+        //esp_wifi_sta_enterprise_disable();
 
         esp_wifi_set_config(WIFI_IF_STA, &ap_config);
         esp_wifi_connect();
