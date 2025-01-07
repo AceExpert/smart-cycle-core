@@ -46,6 +46,7 @@ uint8_t mpu_addr[3] = {0x6B, 0x1C, 0x3B};
 time_t alert_time = 0;
 time_t turb_time = 0;
 time_t turb_stop = 0;
+uint8_t to_alert = 0;
 
 uint8_t cruise = 0;
 uint8_t unlocked = 0;
@@ -137,6 +138,10 @@ void gps_server(void*) {
                 }
                 xTimerStop(gps_server_auth, portMAX_DELAY);
                 gps_server_callbacks.on_authorized(phone_socket);
+                if(to_alert) {
+                    to_alert = 0;
+                    send(phone_socket, "$alert\n", 7, 0);
+                }
             }
         }
     };
@@ -329,12 +334,10 @@ void on_gps_disconnected(int phone_sock) {
 
 void process_cmd(const char* cmd) {
     if(strcmp(cmd, "alert") == 0) {
-        if(!alert_timer)
-            alert_timer = xTimerCreate("alert_timer", pdMS_TO_TICKS(8000), pdTRUE, NULL, send_alert);
         if(phone_connected) {
             send(phone_socket, "$alert\n", 7, 0);
         } else {
-            xTimerReset(alert_timer, portMAX_DELAY);
+            to_alert = 1;
         };
     } else if (strcmp(cmd, "unlocked") == 0) {
         unlocked = 1;
