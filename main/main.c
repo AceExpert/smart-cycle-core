@@ -343,9 +343,9 @@ void monitor_motion(void*) {
 
     while(1) {
 
-        if(unlocked) {
+        if(true) {
             uint8_t d;
-            int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 5 / portTICK_PERIOD_MS);
+            int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
             
             if(cmd_start) {
                 if (read_len < 1) {
@@ -468,7 +468,8 @@ void monitor_motion(void*) {
             pop_media(&media_cmds);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        if(!cmd_start)
+            vTaskDelay(pdMS_TO_TICKS(10));
     }
     free(uart_cmd);
 }
