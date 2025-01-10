@@ -45,6 +45,9 @@ uint8_t cruise = 0;
 clock_t force_start[2] = {0, 0};
 clock_t tap_end[2] = {0, 0};
 clock_t last_tap[2] = {0, 0};
+
+uint8_t vol_ctrl[2] = {0, 0};
+
 int taps[2] = {0, 0};
 
 enum MEDIA_CONTROLS {
@@ -351,31 +354,32 @@ void monitor_motion(void*) {
             {
             case PREV:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".prev", false);
+                uart_write_bytes(UART_NUM_2, ".prev", 5);
                 break;
             
             case NEXT:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".next", false);
-
+                uart_write_bytes(UART_NUM_2, ".next", 5);
                 break;
 
             case PLAY_PAUSE:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".play", false);
-
+                uart_write_bytes(UART_NUM_2, ".play", 5);
                 break;
 
             case VOL_UP:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 7, (uint8_t*)".vol_up", false);
-
+                uart_write_bytes(UART_NUM_2, ".vol_up", 7);
                 break;
 
             case VOL_DOWN:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (uint8_t*)".vol_down", false);
-
+                uart_write_bytes(UART_NUM_2, ".vol_down", 9);
                 break;
 
             case VOL_STOP:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (uint8_t*)".vol_stop", false);
-
+                uart_write_bytes(UART_NUM_2, ".vol_stop", 9);
                 break;
 
             default: {
@@ -470,8 +474,9 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
         if(final_val < 3801 && !force_start[i]) {
             tap_end[i] = 0;
             force_start[i] = clock();
-        } else if (clock() - force_start[i] >= 400 && final_val < 3801) {
+        } else if (clock() - force_start[i] >= 400 && final_val < 3801 && !vol_ctrl[i]) {
             add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
+            vol_ctrl[i] = 1;
         };
 
         if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
@@ -496,6 +501,7 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
                 tap_end[i] = clock();
             } else if (diff >= 400) {
                 add_media(&media_cmds, VOL_STOP, 0);
+                vol_ctrl[i] = 0;
             }
             force_start[i] = 0;
         }
