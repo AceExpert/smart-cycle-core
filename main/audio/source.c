@@ -87,7 +87,7 @@ void clear_playlist(int index) {
 
 void cruise_mode() {
     if (playlist) {
-        if(strcpy(playlist->play, "/sdcard/startup.pcm") == 0) {
+        if(strcmp(playlist->play, "/sdcard/startup.pcm") == 0) {
             clear_playlist(1);
         } else {
             esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);

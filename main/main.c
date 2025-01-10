@@ -14,7 +14,6 @@
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "driver/i2s_std.h"
-#include "driver/i2c_master.h"
 #include "esp_adc/adc_continuous.h"
 
 #include "freertos/FreeRTOS.h"
@@ -29,8 +28,6 @@
 #define ABS(a) (((a) > 0) ? (a) : (-(a)))
 
 i2s_chan_handle_t i2s_rx;
-i2c_master_bus_handle_t mpu_bus;
-i2c_master_dev_handle_t mpu_handle;
 
 adc_continuous_handle_t adc_handle;
 
@@ -154,18 +151,18 @@ void setup_adc() {
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE1,
         .conv_mode = ADC_CONV_SINGLE_UNIT_1,
         .sample_freq_hz = 20000,
-        .pattern_num = 1,
+        .pattern_num = 2,
     };
 
     adc_digi_pattern_config_t adc_pattern[2] = {0};
 
-    for (int i = 1; i < 2; i++) {
+    for (int i = 0; i < 2; i++) {
         uint8_t adc_unit, adc_channel;
-        adc_continuous_io_to_channel(i? 36 : 39, &adc_unit, &adc_channel); 
-        adc_pattern[0].atten = ADC_ATTEN_DB_12;
-        adc_pattern[0].channel = adc_channel;
-        adc_pattern[0].unit = adc_unit;
-        adc_pattern[0].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+        adc_continuous_io_to_channel(i? 36 : 34, &adc_unit, &adc_channel); 
+        adc_pattern[i].atten = ADC_ATTEN_DB_12;
+        adc_pattern[i].channel = adc_channel;
+        adc_pattern[i].unit = adc_unit;
+        adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     };
 
     adc_cfg.adc_pattern = adc_pattern;
@@ -256,36 +253,15 @@ void app_main(void)
     uart_param_config(UART_NUM_2, &main_uart);
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
 
-    i2c_master_bus_config_t mpu_bus_cfg = {
-        .clk_source = I2C_CLK_SRC_APB,
-        .scl_io_num = 25,
-        .sda_io_num = 26,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-        .i2c_port = -1,
-    };
-
-    i2c_device_config_t mpu_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = 0x68,
-        .scl_speed_hz = 100000,
-    };
-
-    /*i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
-    i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
-    
-    uint8_t reset[2] = {*mpu_addr, 0};
-    uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
-
-    i2c_master_transmit(mpu_handle, reset, 2, -1);
-    i2c_master_transmit(mpu_handle, cfg, 2, -1);*/
-
     setup_adc();
     mount_sdcard();
     start_bluetooth();
     setup_ble();
+
+    //adc_continuous_start(adc_handle);
     
     xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
+    //xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
 }
 
 void on_speaker_connect() {
@@ -298,7 +274,7 @@ void cycle_unlocked() {
     add_playlist("/sdcard/startup.pcm", 0);
     //add_playlist("/sdcard/music.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    //adc_continuous_start(adc_handle);
+    adc_continuous_start(adc_handle);
 }
 
 void cycle_locked() {
@@ -319,7 +295,7 @@ void process_cmd(const char* cmd) {
         }
         i2s_handle_set(&i2s_rx);
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    } else if (strcmp(cmd, "alert") == 0) {
+    } else if (strcmp(cmd, "alert") == 0 && !unlocked) {
         add_playlist("/sdcard/alarm.pcm", 1);
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     } else if (strcmp(cmd, "cruise") == 0) {
@@ -327,7 +303,7 @@ void process_cmd(const char* cmd) {
             cruise = 1;
             cruise_mode();
         }
-    } else if (strcmp(cmd, "alert_stop") == 0) {
+    } else if (strcmp(cmd, "alert_stop") == 0 && !cruise) {    
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
         clear_playlist(0);
     }
@@ -343,93 +319,34 @@ void monitor_motion(void*) {
 
     while(1) {
 
-        if(true) {
-            uint8_t d;
-            int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
-            
-            if(cmd_start) {
-                if (read_len < 1) {
-                    cmd_start = 0;
-                    free(uart_cmd);
-                    uart_cmd = malloc(0);
-                    cmd_len = 0;
-                }
-                else if (d == '\n') {
-                    cmd_start = 0;
-                    uart_cmd = realloc(uart_cmd, cmd_len+1);
-                    uart_cmd[cmd_len] = 0;
-                    cmd_len = 0;
-                    process_cmd((const char*)uart_cmd);
-                    free(uart_cmd);
-                    uart_cmd = malloc(0);
-                } else {
-                    uart_cmd = realloc(uart_cmd, cmd_len+1);
-                    uart_cmd[cmd_len++] = d;
-                }
+        uint8_t d;
+        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
+        
+        if(cmd_start) {
+            if (read_len < 1) {
+                cmd_start = 0;
+                free(uart_cmd);
+                uart_cmd = malloc(0);
+                cmd_len = 0;
             }
-            if (read_len && d == '.') {
-                cmd_start = 1;
+            else if (d == '\n') {
+                cmd_start = 0;
+                uart_cmd = realloc(uart_cmd, cmd_len+1);
+                uart_cmd[cmd_len] = 0;
+                cmd_len = 0;
+                process_cmd((const char*)uart_cmd);
+                free(uart_cmd);
+                uart_cmd = malloc(0);
+            } else {
+                uart_cmd = realloc(uart_cmd, cmd_len+1);
+                uart_cmd[cmd_len++] = d;
             }
-        };
+        }
+        if (read_len && d == '.') {
+            cmd_start = 1;
+        }
 
-        if(!cruise && false) {
-            int16_t accel[3];
-            if(i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1) == 0) {
-
-                *accel = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) * 10 / 4096.00; 
-                accel[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) * 10 / 4096.00;
-                accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
-
-                double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
-    
-                if (ABS(net_a - 10) >= 0.85) {
-                    if(alert_time) {
-                        alert_time = time(NULL);
-                    }
-                    else if (turb_time) {
-                        turb_stop = 0;
-                        if ((time(NULL) - turb_time) >= (unlocked ? 1 : 2)) {
-                            if(unlocked) {
-                                cruise_mode();
-                                cruise = 1;
-                            } else {
-                                add_playlist("/sdcard/alarm.pcm", 1);
-                                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-                                uart_write_bytes(UART_NUM_2, ".alert\n", 7);
-                                printf("alert\n");
-                                alert_time = time(NULL);
-                            };
-                        };
-                    } else {
-                        turb_time = time(NULL);
-                        turb_stop = 0;
-                    }
-                } else {
-                    if (alert_time) {
-                        if (time(NULL) - alert_time >= 9) {
-                            turb_stop = 0;
-                            turb_time = 0;
-                            alert_time = 0;
-                            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
-                            printf("alert stop\n");
-                            clear_playlist(0);
-                        }
-                    } 
-                    else if (turb_stop) {
-                        if (time(NULL) - turb_stop >= 3) {
-                            turb_stop = 0;
-                            turb_time = 0;
-                            alert_time = 0;
-                        }
-                    }
-                    else if (turb_time) {
-                        turb_stop = time(NULL);
-                    }
-                }
-            };
-        };
-
-        if(cruise && media_cmds) {
+        if(media_cmds) {
             switch (media_cmds->ctrl)
             {
             case PREV:
@@ -472,6 +389,7 @@ void monitor_motion(void*) {
             vTaskDelay(pdMS_TO_TICKS(10));
     }
     free(uart_cmd);
+    vTaskDelete(NULL);
 }
 
 double avg(adc_digi_output_data_t* readings, uint32_t len) {
@@ -486,31 +404,37 @@ void media_ctrl_exec(void*){
             switch (media_cmds->ctrl)
             {
             case PREV:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".prev", false);
+                printf("prev\n");
+                //esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".prev", false);
                 break;
             
             case NEXT:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".next", false);
+                //esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".next", false);
+                printf("next\n");
 
                 break;
 
             case PLAY_PAUSE:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".play", false);
+                //esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (const uint8_t*)".play", false);
+                printf("play_pause\n");
 
                 break;
 
             case VOL_UP:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 7, (const uint8_t*)".vol_up", false);
+                //esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 7, (const uint8_t*)".vol_up", false);
+                printf("vol_up\n");
 
                 break;
 
             case VOL_DOWN:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (const uint8_t*)".vol_down", false);
+                //esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (const uint8_t*)".vol_down", false);
+                printf("vol_down\n");
 
                 break;
 
             case VOL_STOP:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (const uint8_t*)".vol_stop", false);
+                //esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (const uint8_t*)".vol_stop", false);
+                printf("vol_stop\n");
 
                 break;
 
@@ -528,45 +452,53 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
 {
     adc_digi_output_data_t* final_data = data->conv_frame_buffer;
 
-    double final_val = final_data->type1.data;
+    for(int k = 0; k < 2;) {
+        double final_val = final_data->type1.data;
 
-    int gpio_num;
-    adc_continuous_channel_to_io(ADC_UNIT_1, final_data->type1.channel, &gpio_num);
+        int gpio_num;
+        adc_continuous_channel_to_io(ADC_UNIT_1, final_data->type1.channel, &gpio_num);
 
-    int i = (int)(gpio_num == 39);
-    int j = (int)(gpio_num != 39);
+        int i = (int)(gpio_num == 34);
+        int j = (int)(gpio_num != 34);
 
-    if(final_val < 3801 && !force_start[i]) {
-        tap_end[i] = 0;
-        force_start[i] = clock();
-    } else if (clock() - force_start[i] >= 400 && final_val < 3801) {
-        add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
-    };
-
-    if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
-        if(taps[i] <= 2 && !taps[j]) { 
-            if(taps[i] == 1)
-                add_media(&media_cmds, i? NEXT : PREV, 0);
-            tap_end[i] = 0;
-            taps[i] = 0;
-        } else if (taps[i] == 1 && taps[j] == 1) {
-            add_media(&media_cmds, PLAY_PAUSE, 0);
-            tap_end[i] = 0;
-            taps[i] = 0;
-            tap_end[j] = 0;
-            taps[j] = 0;
+        if(k == 1 && i != 1) {
+            final_data++;
+            continue;
         };
-    }
+        k++;
 
-    if(force_start[i] && final_val > 4000 && !tap_end[i]) {
-        clock_t diff = clock() - force_start[i];
-        if(diff <= 300 && diff >= 15) {
-            taps[i]++;
-            tap_end[i] = clock();
-        } else if (diff >= 400) {
-            add_media(&media_cmds, VOL_STOP, 0);
+        if(final_val < 3801 && !force_start[i]) {
+            tap_end[i] = 0;
+            force_start[i] = clock();
+        } else if (clock() - force_start[i] >= 400 && final_val < 3801) {
+            add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
+        };
+
+        if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
+            if(taps[i] <= 2 && !taps[j]) { 
+                if(taps[i] == 1)
+                    add_media(&media_cmds, i? NEXT : PREV, 0);
+                tap_end[i] = 0;
+                taps[i] = 0;
+            } else if (taps[i] == 1 && taps[j] == 1) {
+                add_media(&media_cmds, PLAY_PAUSE, 0);
+                tap_end[i] = 0;
+                taps[i] = 0;
+                tap_end[j] = 0;
+                taps[j] = 0;
+            };
         }
-        force_start[i] = 0;
-    }
+
+        if(force_start[i] && final_val > 4000 && !tap_end[i]) {
+            clock_t diff = clock() - force_start[i];
+            if(diff <= 300 && diff >= 15) {
+                taps[i]++;
+                tap_end[i] = clock();
+            } else if (diff >= 400) {
+                add_media(&media_cmds, VOL_STOP, 0);
+            }
+            force_start[i] = 0;
+        }
+    };
     return false;
 }
