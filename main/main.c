@@ -17,7 +17,8 @@
 #include "esp_bt_main.h"
 
 #include "driver/gpio.h"
-#include "driver/i2s_std.h"
+//#include "driver/i2s_std.h"
+#include "driver/i2s.h"
 #include "driver/i2c_master.h"
 
 #include "freertos/FreeRTOS.h"
@@ -33,8 +34,8 @@
 #define MPU_VALUE(b2, b1) ((int16_t)(((b2) >> 7) ? ~((b2) << 8 | (b1)) : ((b2) << 8 | (b1))))
 #define ABS(a) (((a) > 0) ? (a) : (-(a)))
 
-i2s_chan_handle_t i2s_tx;
-i2s_chan_handle_t mic_rx;
+/*i2s_chan_handle_t i2s_tx;
+i2s_chan_handle_t mic_rx;*/
 
 TaskHandle_t* uart_task;
 
@@ -225,7 +226,7 @@ void app_main(void)
 
     esp_netif_t* sta_int = esp_netif_create_default_wifi_sta();
 
-    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    /*i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
     i2s_chan_config_t i2s_rx_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
 
     i2s_std_config_t i2s_cfg = {
@@ -245,13 +246,13 @@ void app_main(void)
         }
     };
     i2s_std_config_t i2s_rx_cfg = {
-        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(16000),
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
-            .bclk = 14,
-            .din = 12,
-            .ws = 13,
+            .bclk = 32,
+            .din = 33,
+            .ws = 25,
             .dout = I2S_GPIO_UNUSED,
             .invert_flags = {
                 .bclk_inv = false,
@@ -264,7 +265,31 @@ void app_main(void)
     i2s_new_channel(&i2s_rx_chan_cfg, NULL, &mic_rx);
 
     i2s_channel_init_std_mode(i2s_tx, &i2s_cfg);
-    i2s_channel_init_std_mode(mic_rx, &i2s_rx_cfg);
+    i2s_channel_init_std_mode(mic_rx, &i2s_rx_cfg);*/
+
+    i2s_config_t i2s_mic_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+        .sample_rate = 16000,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 4,
+        .dma_buf_len = 1024,
+        .use_apll = false,
+        .tx_desc_auto_clear = false,
+        .fixed_mclk = 0
+    };
+
+    i2s_pin_config_t i2s_mic_pins = {
+        .bck_io_num = 32,
+        .ws_io_num = 25,
+        .data_out_num = -1,
+        .data_in_num = 33
+    };
+
+    i2s_driver_install(I2S_NUM_0, &i2s_mic_config, 0, NULL);
+    i2s_set_pin(I2S_NUM_0, &i2s_mic_pins);
 
     uart_config_t main_uart = {
         .baud_rate = 115200,
@@ -295,20 +320,21 @@ void app_main(void)
     };
 
     i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
-    i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
+    //i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
     
     uint8_t reset[2] = {*mpu_addr, 0};
     uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
 
-    i2c_master_transmit(mpu_handle, reset, 2, -1);
-    i2c_master_transmit(mpu_handle, cfg, 2, -1);
+    //i2c_master_transmit(mpu_handle, reset, 2, -1);
+    //i2c_master_transmit(mpu_handle, cfg, 2, -1);
 
-    set_i2s_tx_chan(&i2s_tx);
-    setup_wifi();
+    //set_i2s_tx_chan(&i2s_tx);
+    //set_i2s_rx_chan(&mic_rx);
+    //setup_wifi();
     start_bluetooth();
-    setup_gps();
+    //setup_gps();
 
-    xTaskCreate(uart_cmd_task, "uart_cmd_task", 3584, NULL, 4, uart_task);
+    //xTaskCreate(uart_cmd_task, "uart_cmd_task", 3584, NULL, 4, uart_task);
 }
 
 void send_gps(const char* tag, struct gps_info gpsinfo) {
