@@ -47,6 +47,7 @@ clock_t tap_end[2] = {0, 0};
 clock_t last_tap[2] = {0, 0};
 
 uint8_t vol_ctrl[2] = {0, 0};
+uint8_t horn = 0;
 
 int taps[2] = {0, 0};
 
@@ -58,6 +59,8 @@ enum MEDIA_CONTROLS {
     VOL_DOWN,
     VOL_STOP,
     JOIN,
+    HORN,
+    HORN_STOP,
 };
 
 struct media_cmd {
@@ -382,6 +385,12 @@ void monitor_motion(void*) {
                 uart_write_bytes(UART_NUM_2, ".vol_stop", 9);
                 break;
 
+            case HORN:
+                break;
+
+            case HORN_STOP:
+                break;
+
             default: {
                 break;
             };
@@ -475,8 +484,15 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
             tap_end[i] = 0;
             force_start[i] = clock();
         } else if (clock() - force_start[i] >= 400 && final_val < 3801 && !vol_ctrl[i]) {
-            add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
-            vol_ctrl[i] = 1;
+            if(force_start[j] && ABS(force_start[i] - force_start[j]) <= 100) {
+                horn = 1;
+                add_media(&media_cmds, HORN, 0);
+                vol_ctrl[i] = 1;
+                vol_ctrl[j] = 1;
+            } else {
+                add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
+                vol_ctrl[i] = 1;
+            };
         };
 
         if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
@@ -500,6 +516,10 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
                 taps[i]++;
                 tap_end[i] = clock();
             } else if (diff >= 400) {
+                if(horn) {
+                    horn = 0;
+                    add_media(&media_cmds, HORN_STOP, 0);
+                }
                 add_media(&media_cmds, VOL_STOP, 0);
                 vol_ctrl[i] = 0;
             }
