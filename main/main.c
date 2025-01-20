@@ -295,10 +295,11 @@ void app_main(void)
         .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_MSB,
+        .intr_alloc_flags = 0,
         .dma_buf_count = 4,
         .dma_buf_len = 1024,
         .use_apll = false,
-        .tx_desc_auto_clear = false,
+        .tx_desc_auto_clear = true,
         .fixed_mclk = 0
     };
 
