@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "driver/i2s_std.h"
-//#include "driver/i2s.h"
+//#include "driver/i2s_std.h"
+#include "driver/i2s.h"
 #include "driver/uart.h"
 
 #include "esp_bt.h"
@@ -70,15 +70,15 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         switch (param->conn_stat.state)
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
-            i2s_channel_enable(*tx_chan);
-            //i2s_start(I2S_NUM_1);
+            //i2s_channel_enable(*tx_chan);
+            i2s_start(I2S_NUM_1);
             uart_write_bytes(UART_NUM_2, ".audio_play\n", 12); 
             printf("Phone connected.\n");
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
             uart_write_bytes(UART_NUM_2, ".audio_stop\n", 12); 
-            //i2s_stop(I2S_NUM_1);
-            i2s_channel_disable(*tx_chan);
+            i2s_stop(I2S_NUM_1);
+            //i2s_channel_disable(*tx_chan);
             break;
         default: {
             break;
@@ -126,15 +126,15 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
             if (oct0 & (0x01 << 3)) {
                 ch_count = 1;
             }
-            /*i2s_stop(I2S_NUM_1);
+            i2s_stop(I2S_NUM_1);
             i2s_set_clk(I2S_NUM_1, sample_rate, I2S_DATA_BIT_WIDTH_16BIT, ch_count);
-            i2s_start(I2S_NUM_1);*/
-            i2s_channel_disable(*tx_chan);
+            i2s_start(I2S_NUM_1);
+            /*i2s_channel_disable(*tx_chan);
             i2s_std_clk_config_t clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate);
             i2s_std_slot_config_t slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, ch_count);
             i2s_channel_reconfig_std_clock(*tx_chan, &clk_cfg);
             i2s_channel_reconfig_std_slot(*tx_chan, &slot_cfg);
-            i2s_channel_enable(*tx_chan);
+            i2s_channel_enable(*tx_chan);*/
         }
         break;
     };
@@ -146,9 +146,9 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
 
 void recv_audio(const uint8_t* buf, uint32_t len) {
     if (buf == NULL || len == 0) return;
-    i2s_channel_write(*tx_chan, buf, len, NULL, pdMS_TO_TICKS(20));
-    /*size_t written;
-    i2s_write(I2S_NUM_1, buf, len, &written, pdMS_TO_TICKS(10));*/
+    //i2s_channel_write(*tx_chan, buf, len, NULL, pdMS_TO_TICKS(20));
+    size_t written;
+    i2s_write(I2S_NUM_1, buf, len, &written, pdMS_TO_TICKS(10));
 };
 
 static uint32_t hf_send_audio(uint8_t *buf, uint32_t len)
@@ -156,7 +156,7 @@ static uint32_t hf_send_audio(uint8_t *buf, uint32_t len)
     if(buf == NULL || len < 0) return 0;
     //int16_t data[len / 2];
     size_t num_read;
-    //i2s_read(I2S_NUM_0, buf, len, &num_read, pdMS_TO_TICKS(10));
+    i2s_read(I2S_NUM_0, buf, len, &num_read, pdMS_TO_TICKS(10));
     /*for(int i = 0; i < num_read / 2; i++) {
         //uint16_t temp = data[i] >> 14;
         //uint16_t final_d = (temp > INT16_MAX) ? INT16_MAX : (temp < -INT16_MAX) ? -INT16_MAX : (uint16_t)temp;
@@ -166,15 +166,15 @@ static uint32_t hf_send_audio(uint8_t *buf, uint32_t len)
         buf[i * 2 + 1] = ft[1]; 
         memcpy(buf + (i * 2), data + i, 2);
     };*/
-    i2s_channel_read(*rx_chan, buf, len, NULL, pdMS_TO_TICKS(10));
+    //i2s_channel_read(*rx_chan, buf, len, NULL, pdMS_TO_TICKS(10));
     return len;
 }
 
 static void hf_recv_audio(const uint8_t *buf, uint32_t len)
 {
-    /*size_t written;
-    i2s_write(I2S_NUM_1, buf, len, &written, pdMS_TO_TICKS(10));*/
-    i2s_channel_write(*tx_chan, buf, len, NULL, pdMS_TO_TICKS(20));
+    size_t written;
+    i2s_write(I2S_NUM_1, buf, len, &written, pdMS_TO_TICKS(10));
+    //i2s_channel_write(*tx_chan, buf, len, NULL, pdMS_TO_TICKS(20));
     esp_hf_client_outgoing_data_ready();
 }
 
@@ -198,15 +198,15 @@ void hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_t *para
     case ESP_HF_CLIENT_AUDIO_STATE_EVT: {
         if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_CONNECTED || param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_CONNECTED_MSBC) {
             esp_hf_client_register_data_callback(hf_recv_audio, hf_send_audio);
-            i2s_channel_enable(*rx_chan);
+            //i2s_channel_enable(*rx_chan);
             esp_hf_client_outgoing_data_ready();
             printf("HFP Audio connected.\n");
-            //i2s_start(I2S_NUM_0);
+            i2s_start(I2S_NUM_0);
             uart_write_bytes(UART_NUM_2, ".incall\n", 8);
         } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
             uart_write_bytes(UART_NUM_2, ".endcall\n", 9);
-            //i2s_stop(I2S_NUM_0);
-            i2s_channel_disable(*rx_chan);
+            i2s_stop(I2S_NUM_0);
+            //i2s_channel_disable(*rx_chan);
         }
     }
     case ESP_HF_CLIENT_BVRA_EVT:
