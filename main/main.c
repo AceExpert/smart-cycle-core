@@ -330,9 +330,11 @@ void process_cmd(const char* cmd) {
     } else if (strcmp(cmd, "audio_stop") == 0) {
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
     } else if (strcmp(cmd, "incall") == 0) {
+        in_call();
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     } else if (strcmp(cmd, "endcall") == 0) {
-        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+        end_call();
+    } else if (strcmp(cmd, "incoming") == 0) {
     }
     else if (strcmp(cmd, "alert") == 0 && !unlocked) {
         add_playlist("/sdcard/alarm.pcm", 1);

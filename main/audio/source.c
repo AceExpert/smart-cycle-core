@@ -31,6 +31,18 @@ void set_on_speaker_connect(void (*callb)()) {
     callbacks.speaker_connected = callb;
 }
 
+void in_call() {
+    i2s_stop(I2S_NUM_1);
+    i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, 1);
+    i2s_start(I2S_NUM_1);
+}
+
+void end_call() {
+    i2s_stop(I2S_NUM_1);
+    i2s_set_clk(I2S_NUM_1, 44100, I2S_DATA_BIT_WIDTH_16BIT, 2);
+    i2s_start(I2S_NUM_1);
+}
+
 void add_playlist(const char* path, uint8_t repeat) {
     struct local_playlist* new_play = malloc(sizeof(struct local_playlist));
     new_play->play = malloc(strlen(path) + 1);

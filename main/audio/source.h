@@ -28,3 +28,5 @@ void clear_playlist(int index);
 void cruise_mode();
 void i2s_handle_set(i2s_chan_handle_t* chan);
 void set_on_speaker_connect(void (*)());
+void in_call();
+void end_call();
