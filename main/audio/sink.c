@@ -13,7 +13,7 @@
 
 #include "sink.h"
 
-i2s_chan_handle_t* tx_chan;
+/*i2s_chan_handle_t* tx_chan;
 i2s_chan_handle_t* rx_chan;
 
 void set_i2s_tx_chan(i2s_chan_handle_t* i2s_tx) {
@@ -22,7 +22,7 @@ void set_i2s_tx_chan(i2s_chan_handle_t* i2s_tx) {
 
 void set_i2s_rx_chan(i2s_chan_handle_t* i2s_rx) {
     rx_chan = i2s_rx;
-}
+}*/
 
 void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 {
