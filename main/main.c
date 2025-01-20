@@ -13,7 +13,8 @@
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
-#include "driver/i2s_std.h"
+//#include "driver/i2s_std.h"
+#include "driver/i2s.h"
 #include "esp_adc/adc_continuous.h"
 
 #include "freertos/FreeRTOS.h"
@@ -225,7 +226,7 @@ void app_main(void)
         nvs_flash_init();
     }
 
-    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
+    /*i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_SLAVE);
     i2s_std_config_t i2s_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
@@ -244,7 +245,32 @@ void app_main(void)
     };
     i2s_new_channel(&i2s_chan_cfg, NULL, &i2s_rx);
     i2s_channel_init_std_mode(i2s_rx, &i2s_cfg);
-    i2s_channel_enable(i2s_rx);
+    i2s_channel_enable(i2s_rx);*/
+
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_SLAVE | I2S_MODE_RX),
+        .sample_rate = 44100,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .intr_alloc_flags = 0,
+        .dma_buf_count = 4,
+        .dma_buf_len = 1024,
+        .use_apll = false,
+        .tx_desc_auto_clear = false,
+        .fixed_mclk = 0
+    };
+
+    i2s_pin_config_t i2s_pins = {
+        .bck_io_num = 15,
+        .ws_io_num = 0,
+        .data_out_num = -1,
+        .data_in_num = 4,
+        .mck_io_num = -1,
+    };
+
+    i2s_driver_install(I2S_NUM_1, &i2s_config, 0, NULL);
+    i2s_set_pin(I2S_NUM_1, &i2s_pins);
 
     uart_config_t main_uart = {
         .baud_rate = 115200,

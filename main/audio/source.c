@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "driver/i2s_std.h"
+//#include "driver/i2s_std.h"
+#include "driver/i2s.h"
 
 #include "esp_bt.h"
 #include "esp_gap_bt_api.h"
@@ -209,7 +210,9 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
         }
         return fread(buf, 1, len, play_file);
     } else if (i2s_chan) {
-        i2s_channel_read(*i2s_chan, buf, len, NULL, pdMS_TO_TICKS(20));
+        size_t read;
+        //i2s_channel_read(*i2s_chan, buf, len, NULL, pdMS_TO_TICKS(20));
+        i2s_read(I2S_NUM_1, buf, len, &read, pdMS_TO_TICKS(20));
         return len;
     }
     return 0;
