@@ -225,16 +225,16 @@ void app_main(void)
         nvs_flash_init();
     }
 
-    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_SLAVE);
+    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
     i2s_std_config_t i2s_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
             .bclk = 15,
-            .dout = 4,
+            .dout = I2S_GPIO_UNUSED,
             .ws = 0,
-            .din = I2S_GPIO_UNUSED,
+            .din = 4,
             .invert_flags = {
                 .bclk_inv = false,
                 .mclk_inv = false,
