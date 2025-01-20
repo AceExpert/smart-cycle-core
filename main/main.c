@@ -282,14 +282,40 @@ void app_main(void)
     };
 
     i2s_pin_config_t i2s_mic_pins = {
-        .bck_io_num = 32,
-        .ws_io_num = 25,
+        .bck_io_num = 14,
+        .ws_io_num = 12,
         .data_out_num = -1,
-        .data_in_num = 33
+        .data_in_num = 13
+    };
+
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_SLAVE),
+        .sample_rate = 44100,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_MSB,
+        .dma_buf_count = 4,
+        .dma_buf_len = 2048,
+        .use_apll = false,
+        .tx_desc_auto_clear = false,
+        .fixed_mclk = 0
+    };
+
+    i2s_pin_config_t i2s_pins = {
+        .bck_io_num = 19,
+        .ws_io_num = 18,
+        .data_out_num = 5,
+        .data_in_num = -1
     };
 
     i2s_driver_install(I2S_NUM_0, &i2s_mic_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &i2s_mic_pins);
+
+    i2s_driver_install(I2S_NUM_1, &i2s_config, 0, NULL);
+    i2s_set_pin(I2S_NUM_1, &i2s_pins);
+
+    i2s_stop(I2S_NUM_0);
+    i2s_stop(I2S_NUM_1);
 
     uart_config_t main_uart = {
         .baud_rate = 115200,
@@ -330,9 +356,9 @@ void app_main(void)
 
     //set_i2s_tx_chan(&i2s_tx);
     //set_i2s_rx_chan(&mic_rx);
-    //setup_wifi();
+    setup_wifi();
     start_bluetooth();
-    //setup_gps();
+    setup_gps();
 
     //xTaskCreate(uart_cmd_task, "uart_cmd_task", 3584, NULL, 4, uart_task);
 }

@@ -71,9 +71,13 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
             //i2s_channel_enable(*tx_chan);
+            i2s_start(I2S_NUM_1);
+            uart_write_bytes(UART_NUM_2, ".audio_play\n", 12); 
             printf("Phone connected.\n");
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
+            uart_write_bytes(UART_NUM_2, ".audio_stop\n", 12); 
+            i2s_stop(I2S_NUM_1);
             //i2s_channel_disable(*tx_chan);
             break;
         default: {
@@ -108,7 +112,7 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     case ESP_A2D_AUDIO_CFG_EVT: {
         esp_a2d_cb_param_t* a2d_param = param;
         if (a2d_param->audio_cfg.mcc.type == ESP_A2D_MCT_SBC) {
-            int sample_rate = 16000;
+            uint32_t sample_rate = 16000;
             int ch_count = 2;
             char oct0 = a2d_param->audio_cfg.mcc.cie.sbc[0];
             if (oct0 & (0x01 << 6)) {
@@ -122,6 +126,9 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
             if (oct0 & (0x01 << 3)) {
                 ch_count = 1;
             }
+            i2s_stop(I2S_NUM_1);
+            i2s_set_clk(I2S_NUM_1, sample_rate, I2S_DATA_BIT_WIDTH_16BIT, ch_count);
+            i2s_start(I2S_NUM_1);
             /*i2s_channel_disable(*tx_chan);
             i2s_std_clk_config_t clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate);
             i2s_std_slot_config_t slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, ch_count);
@@ -191,9 +198,11 @@ void hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_t *para
             //i2s_channel_enable(*rx_chan);
             esp_hf_client_outgoing_data_ready();
             printf("HFP Audio connected.\n");
-            uart_write_bytes(UART_NUM_2, ".incall", 7);
+            i2s_start(I2S_NUM_0);
+            uart_write_bytes(UART_NUM_2, ".incall\n", 8);
         } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
-            uart_write_bytes(UART_NUM_2, ".endcall", 8);
+            uart_write_bytes(UART_NUM_2, ".endcall\n", 9);
+            i2s_stop(I2S_NUM_0);
             //i2s_channel_disable(*rx_chan);
         }
     }
