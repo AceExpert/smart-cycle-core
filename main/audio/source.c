@@ -92,6 +92,7 @@ void cruise_mode() {
         } else {
             esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
             if(play_file) fclose(play_file);
+            play_file = NULL;
             clear_playlist(0);
         }
     }

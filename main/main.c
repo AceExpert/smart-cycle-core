@@ -225,15 +225,15 @@ void app_main(void)
         nvs_flash_init();
     }
 
-    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
+    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_SLAVE);
     i2s_std_config_t i2s_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100),
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
-            .bclk = 12,
-            .dout = 14,
-            .ws = 27,
+            .bclk = 15,
+            .dout = 4,
+            .ws = 0,
             .din = I2S_GPIO_UNUSED,
             .invert_flags = {
                 .bclk_inv = false,
@@ -260,7 +260,7 @@ void app_main(void)
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
 
     setup_adc();
-    mount_sdcard();
+    //mount_sdcard();
     start_bluetooth();
     setup_ble();
 
@@ -301,7 +301,10 @@ void process_cmd(const char* cmd) {
         }
         i2s_handle_set(&i2s_rx);
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    } else if (strcmp(cmd, "alert") == 0 && !unlocked) {
+    } else if (strcmp(cmd, "audio_stop") == 0) {
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+    }
+    else if (strcmp(cmd, "alert") == 0 && !unlocked) {
         add_playlist("/sdcard/alarm.pcm", 1);
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     } else if (strcmp(cmd, "cruise") == 0) {
