@@ -13,6 +13,8 @@
 
 #include "sink.h"
 
+uint32_t sample_rate = 44100;
+
 /*i2s_chan_handle_t* tx_chan;
 i2s_chan_handle_t* rx_chan;
 
@@ -112,7 +114,7 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     case ESP_A2D_AUDIO_CFG_EVT: {
         esp_a2d_cb_param_t* a2d_param = param;
         if (a2d_param->audio_cfg.mcc.type == ESP_A2D_MCT_SBC) {
-            uint32_t sample_rate = 16000;
+            sample_rate = 16000;
             int ch_count = 2;
             char oct0 = a2d_param->audio_cfg.mcc.cie.sbc[0];
             if (oct0 & (0x01 << 6)) {
@@ -202,10 +204,16 @@ void hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_t *para
             esp_hf_client_outgoing_data_ready();
             printf("HFP Audio connected.\n");
             i2s_start(I2S_NUM_0);
+            i2s_stop(I2S_NUM_1);
+            i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, 1);
+            i2s_start(I2S_NUM_1);
             uart_write_bytes(UART_NUM_2, ".incall\n", 8);
         } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
             uart_write_bytes(UART_NUM_2, ".endcall\n", 9);
             i2s_stop(I2S_NUM_0);
+            i2s_stop(I2S_NUM_1);
+            i2s_set_clk(I2S_NUM_1, sample_rate, I2S_DATA_BIT_WIDTH_16BIT, 2);
+            i2s_start(I2S_NUM_1);
             //i2s_channel_disable(*rx_chan);
         }
     }
