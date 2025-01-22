@@ -175,7 +175,14 @@ static uint32_t hf_send_audio(uint8_t *buf, uint32_t len)
 static void hf_recv_audio(const uint8_t *buf, uint32_t len)
 {
     size_t written;
-    i2s_write(I2S_NUM_1, buf, len, &written, pdMS_TO_TICKS(10));
+    uint8_t data[len*2];
+    for(int i = 0; i < len; i+=2) {
+        data[i * 2] = buf[i];
+        data[i * 2 + 1] = buf[i+1];
+        data[i * 2 + 2] = buf[i];
+        data[i * 2 + 3] = buf[i+1]; 
+    };
+    i2s_write(I2S_NUM_1, data, len * 2, &written, pdMS_TO_TICKS(10));
     //i2s_channel_write(*tx_chan, buf, len, NULL, pdMS_TO_TICKS(20));
     esp_hf_client_outgoing_data_ready();
 }
@@ -205,7 +212,7 @@ void hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_t *para
             printf("HFP Audio connected.\n");
             i2s_start(I2S_NUM_0);
             i2s_stop(I2S_NUM_1);
-            i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, 1);
+            i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, 2);
             i2s_start(I2S_NUM_1);
             uart_write_bytes(UART_NUM_2, ".incall\n", 8);
         } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
