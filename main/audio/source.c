@@ -33,7 +33,7 @@ void set_on_speaker_connect(void (*callb)()) {
 
 void in_call() {
     i2s_stop(I2S_NUM_1);
-    i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, 1);
+    i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, I2S_CHANNEL_STEREO);
     i2s_start(I2S_NUM_1);
 }
 
