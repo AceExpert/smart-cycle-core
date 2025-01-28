@@ -8,9 +8,10 @@
 #include "esp_gap_bt_api.h"
 #include "esp_a2dp_api.h"
 #include "esp_avrc_api.h"
-#include "esp_hf_client_api.h"
+#include "esp_hf_ag_api.h"
 
 #include "source.h"
+
 
 FILE* play_file = NULL;
 struct local_playlist* playlist = NULL;
@@ -18,6 +19,10 @@ struct local_playlist* playlist = NULL;
 i2s_chan_handle_t* i2s_chan;
 
 static esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
+
+uint8_t hfp_on = 0;
+uint8_t hfp_off = 0;
+uint8_t aud_suspend = 1;
 
 struct source_callbacks callbacks = {
     .speaker_connected = NULL,
@@ -32,15 +37,42 @@ void set_on_speaker_connect(void (*callb)()) {
 }
 
 void in_call() {
+    hfp_on = 1;
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
     i2s_stop(I2S_NUM_1);
     i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, I2S_CHANNEL_STEREO);
     i2s_start(I2S_NUM_1);
+    //esp_hf_client_pcm_resample_init(16000, 16, 2);
+    esp_a2d_reconfig_samp_rate(16000);
+    esp_a2d_source_disconnect(speaker_addr);
+
+
+    /*if(aud_suspend) {
+        hfp_on = 0;
+        esp_a2d_reconfig_samp_rate(16000);
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+    } else {
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+    }*/
 }
 
 void end_call() {
+    hfp_on = 0;
+    hfp_off = 1;
+    esp_hf_ag_audio_disconnect(speaker_addr);
     i2s_stop(I2S_NUM_1);
     i2s_set_clk(I2S_NUM_1, 44100, I2S_DATA_BIT_WIDTH_16BIT, 2);
     i2s_start(I2S_NUM_1);
+    esp_a2d_reconfig_samp_rate(44100);
+    esp_a2d_source_disconnect(speaker_addr);
+
+    /*if(aud_suspend) {
+        hfp_off = 0;
+        esp_a2d_reconfig_samp_rate(44100);
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+    } else {
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+    };*/
 }
 
 void add_playlist(const char* path, uint8_t repeat) {
@@ -162,9 +194,11 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
             if(callbacks.speaker_connected) callbacks.speaker_connected();
             printf("Speaker connected.\n");
+            esp_hf_ag_slc_connect(speaker_addr);
             esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
+            aud_suspend = 1;
             esp_a2d_source_connect(speaker_addr);
             break;
         default: {
@@ -178,11 +212,11 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         switch (param->audio_stat.state)
         {
         case ESP_A2D_AUDIO_STATE_STARTED: {
-            
+            aud_suspend = 0;
             break;
         };
         case ESP_A2D_AUDIO_STATE_SUSPEND: {
-            
+            aud_suspend = 1;
             break;
         };
         default: {
@@ -192,14 +226,46 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         break;
     }
     case ESP_A2D_MEDIA_CTRL_ACK_EVT: {
-        if (param->media_ctrl_stat.cmd == ESP_A2D_MEDIA_CTRL_SUSPEND) {
+        if (param->media_ctrl_stat.cmd == ESP_A2D_MEDIA_CTRL_SUSPEND && param->media_ctrl_stat.status == ESP_A2D_MEDIA_CTRL_ACK_SUCCESS) {
+            /*if(hfp_on) {
+                hfp_on = 0;
+                esp_a2d_reconfig_samp_rate(16000);
+                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+            }
+            else if(hfp_off) {
+                hfp_off = 0;
+                esp_a2d_reconfig_samp_rate(44100);
+                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+            }*/
+        } else if (param->media_ctrl_stat.cmd == ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY && param->media_ctrl_stat.status == ESP_A2D_MEDIA_CTRL_ACK_SUCCESS) {
+            if(hfp_off || hfp_on) {
+                hfp_off = 0;
+                hfp_on = 0;
+                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+            }
         }
         break;
     }
+    case ESP_A2D_AUDIO_RECFG_EVT: {
+        break;
+    };
     default:
         break;
     }
 };
+
+uint32_t send_call_voice(uint8_t *buf, uint32_t len) {
+    if(len == 0 || buf == NULL) return 0;
+    size_t num_read;
+    uint8_t data[len];
+    i2s_read(I2S_NUM_1, data, len, &num_read, pdMS_TO_TICKS(10));
+    //esp_hf_client_pcm_resample(data, num_read, buf);
+    return len;
+}
+
+void recv_call_voice(const uint8_t *buf, uint32_t len) {
+    esp_hf_ag_outgoing_data_ready();
+}
 
 int32_t send_audio(uint8_t* buf, int32_t len) {
     if (buf == NULL || len == 0) return 0;
@@ -223,12 +289,204 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
         return fread(buf, 1, len, play_file);
     } else if (i2s_chan) {
         size_t read;
-        //i2s_channel_read(*i2s_chan, buf, len, NULL, pdMS_TO_TICKS(20));
+        //i2s_channel_read(*i2s_chan, buf, len, NULL, pdMS_TO_TICKS(10));
         i2s_read(I2S_NUM_1, buf, len, &read, pdMS_TO_TICKS(20));
         return len;
     }
     return 0;
 };
+
+void esp_hf_ag_cb(esp_hf_cb_event_t event, esp_hf_cb_param_t* param) {
+    switch (event)
+    {
+    case ESP_HF_CONNECTION_STATE_EVT:
+        if(param->conn_stat.state == ESP_HF_CONNECTION_STATE_SLC_CONNECTED) {
+            printf("HFP Ag connected.\n");
+            /*if(hfp_on) {
+                esp_hf_ag_audio_connect(param->conn_stat.remote_bda);
+                hfp_on = 0;
+            }*/
+        }
+        if(param->conn_stat.state == ESP_HF_CONNECTION_STATE_DISCONNECTED) {
+            printf("HFP Ag disconnected.\n");
+            esp_hf_ag_slc_connect(speaker_addr);
+        }
+        break;
+
+    case ESP_HF_AUDIO_STATE_EVT: {
+        if (param->audio_stat.state == ESP_HF_AUDIO_STATE_CONNECTED || param->audio_stat.state == ESP_HF_AUDIO_STATE_CONNECTED_MSBC)
+        {
+            printf("HF AG audio connected to speaker.\n");
+            esp_hf_ag_register_data_callback(recv_call_voice, send_call_voice);
+        } else if (param->audio_stat.state == ESP_HF_AUDIO_STATE_DISCONNECTED) {
+            //esp_hf_client_pcm_resample_deinit();
+        }
+        break;
+    };
+
+    case ESP_HF_BVRA_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--Voice Recognition is %s", c_vr_state_str[param->vra_rep.value]);
+            break;
+        }
+
+        case ESP_HF_VOLUME_CONTROL_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--Volume Target: %s, Volume %d", c_volume_control_target_str[param->volume_control.type], param->volume_control.volume);
+            break;
+        }
+
+        case ESP_HF_UNAT_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--UNKOW AT CMD: %s", param->unat_rep.unat);
+            esp_hf_ag_unknown_at_send(param->unat_rep.remote_addr, NULL);
+            break;
+        }
+
+        case ESP_HF_IND_UPDATE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--UPDATE INDCATOR!");
+            esp_hf_call_status_t call_state = 1;
+            esp_hf_call_setup_status_t call_setup_state = 2;
+            esp_hf_network_state_t ntk_state = 1;
+            int signal = 2;
+            int battery = 3;
+            esp_hf_ag_ciev_report(param->ind_upd.remote_addr, ESP_HF_IND_TYPE_CALL, call_state);
+            esp_hf_ag_ciev_report(param->ind_upd.remote_addr, ESP_HF_IND_TYPE_CALLSETUP, call_setup_state);
+            esp_hf_ag_ciev_report(param->ind_upd.remote_addr, ESP_HF_IND_TYPE_SERVICE, ntk_state);
+            esp_hf_ag_ciev_report(param->ind_upd.remote_addr, ESP_HF_IND_TYPE_SIGNAL, signal);
+            esp_hf_ag_ciev_report(param->ind_upd.remote_addr, ESP_HF_IND_TYPE_BATTCHG, battery);
+            break;
+        }
+
+        case ESP_HF_CIND_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--CIND Start.");
+            esp_hf_call_status_t call_status = 0;
+            esp_hf_call_setup_status_t call_setup_status = 0;
+            esp_hf_network_state_t ntk_state = 1;
+            int signal = 4;
+            esp_hf_roaming_status_t roam = 0;
+            int batt_lev = 3;
+            esp_hf_call_held_status_t call_held_status = 0;
+            esp_hf_ag_cind_response(param->cind_rep.remote_addr,call_status,call_setup_status,ntk_state,signal,roam,batt_lev,call_held_status);
+            break;
+        }
+
+        case ESP_HF_COPS_RESPONSE_EVT:
+        {
+            const int svc_type = 1;
+            esp_hf_ag_cops_response(param->cops_rep.remote_addr, "Cybertron Telecom");
+            break;
+        }
+
+        case ESP_HF_CLCC_RESPONSE_EVT:
+        {
+            int index = 1;
+            //mandatory
+            esp_hf_current_call_direction_t dir = 1;
+            esp_hf_current_call_status_t current_call_status = 0;
+            esp_hf_current_call_mode_t mode = 0;
+            esp_hf_current_call_mpty_type_t mpty = 0;
+            //option
+            char *number = {"123456"};
+            esp_hf_call_addr_type_t type = ESP_HF_CALL_ADDR_TYPE_UNKNOWN;
+
+            //ESP_LOGI(BT_HF_TAG, "--Calling Line Identification.");
+            esp_hf_ag_clcc_response(param->clcc_rep.remote_addr, index, dir, current_call_status, mode, mpty, number, type);
+
+            //AG shall always send ok response to HF
+            //index = 0 means response ok
+            index = 0;
+            esp_hf_ag_clcc_response(param->clcc_rep.remote_addr, index, dir, current_call_status, mode, mpty, number, type);
+            break;
+        }
+
+        case ESP_HF_CNUM_RESPONSE_EVT:
+        {
+            char *number = {"123456"};
+            int number_type = 129;
+            esp_hf_subscriber_service_type_t service_type = ESP_HF_SUBSCRIBER_SERVICE_TYPE_VOICE;
+            if (service_type == ESP_HF_SUBSCRIBER_SERVICE_TYPE_VOICE || service_type == ESP_HF_SUBSCRIBER_SERVICE_TYPE_FAX) {
+                //ESP_LOGI(BT_HF_TAG, "--Current Number is %s, Number Type is %d, Service Type is %s.", number, number_type, c_subscriber_service_type_str[service_type - 3]);
+            } else {
+                //ESP_LOGI(BT_HF_TAG, "--Current Number is %s, Number Type is %d, Service Type is %s.", number, number_type, c_subscriber_service_type_str[0]);
+            }
+            esp_hf_ag_cnum_response(speaker_addr, number, number_type, service_type);
+            break;
+        }
+
+        case ESP_HF_VTS_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--DTMF code is: %s.", param->vts_rep.code);
+            break;
+        }
+
+        case ESP_HF_NREC_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--NREC status is: %s.", c_nrec_status_str[param->nrec.state]);
+            break;
+        }
+
+        case ESP_HF_ATA_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--Asnwer Incoming Call.");
+            char *number = "123456";
+            esp_hf_ag_answer_call(param->ata_rep.remote_addr,1,0,1,0,number,0);
+            break;
+        }
+
+        case ESP_HF_CHUP_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--Reject Incoming Call.");
+            char *number = "123456";
+            esp_hf_ag_reject_call(param->chup_rep.remote_addr,0,0,0,0,number,0);
+            break;
+        }
+
+        case ESP_HF_DIAL_EVT:
+        {
+            if (param->out_call.num_or_loc) {
+                if (param->out_call.type == ESP_HF_DIAL_NUM) {
+                    // dia_num
+                    //ESP_LOGI(BT_HF_TAG, "--Dial number \"%s\".", param->out_call.num_or_loc);
+                    esp_hf_ag_out_call(param->out_call.remote_addr,1,0,1,0,param->out_call.num_or_loc,0);
+                } else if (param->out_call.type == ESP_HF_DIAL_MEM) {
+                    // dia_mem
+                    //ESP_LOGI(BT_HF_TAG, "--Dial memory \"%s\".", param->out_call.num_or_loc);
+                    // AG found phone number by memory position
+                    bool num_found = true;
+                    if (num_found) {
+                        char *number = "123456";
+                        esp_hf_ag_cmee_send(param->out_call.remote_addr, ESP_HF_AT_RESPONSE_CODE_OK, ESP_HF_CME_AG_FAILURE);
+                        esp_hf_ag_out_call(param->out_call.remote_addr,1,0,1,0,number,0);
+                    } else {
+                        esp_hf_ag_cmee_send(param->out_call.remote_addr, ESP_HF_AT_RESPONSE_CODE_CME, ESP_HF_CME_MEMORY_FAILURE);
+                    }
+                }
+            } else {
+                //dia_last
+                //refer to dia_mem
+                //ESP_LOGI(BT_HF_TAG, "--Dial last number.");
+            }
+            break;
+        }
+        case ESP_HF_WBS_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--Current codec: %s",c_codec_mode_str[param->wbs_rep.codec]);
+            break;
+        }
+        case ESP_HF_BCS_RESPONSE_EVT:
+        {
+            //ESP_LOGI(BT_HF_TAG, "--Consequence of codec negotiation: %s",c_codec_mode_str[param->bcs_rep.mode]);
+            printf("Audio codec: %d\n", param->wbs_rep.codec);
+            break;
+        }
+
+    default:
+        break;
+    }
+}
 
 void bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param)
 {

@@ -114,7 +114,7 @@ void start_bluetooth() {
     esp_bluedroid_init();
     esp_bluedroid_enable();
     
-    esp_bt_gap_set_device_name("Cytroid-BR");
+    esp_bt_gap_set_device_name("Cytroid BR");
     esp_bt_gap_register_callback(bt_gap_cb);
     
     esp_avrc_ct_init();
@@ -126,9 +126,12 @@ void start_bluetooth() {
 
     set_on_speaker_connect(on_speaker_connect);
 
+    esp_a2d_reconfig_samp_rate(44100);
     esp_a2d_register_callback(esp_a2d_cb);
     esp_a2d_source_register_data_callback(send_audio);
+    esp_hf_ag_register_callback(esp_hf_ag_cb);
 
+    esp_hf_ag_init();
     esp_a2d_source_init();
 
     esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
@@ -331,7 +334,7 @@ void process_cmd(const char* cmd) {
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
     } else if (strcmp(cmd, "incall") == 0) {
         in_call();
-        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+        //esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     } else if (strcmp(cmd, "endcall") == 0) {
         end_call();
     } else if (strcmp(cmd, "incoming") == 0) {
