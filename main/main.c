@@ -399,6 +399,18 @@ void process_cmd(const char* cmd) {
     } else if (strcmp(cmd, "locked") == 0) {
         unlocked = 0;
         cruise = 0;
+    } else if (strcmp(cmd, "next") == 0) {
+        esp_hf_client_answer_call();
+    } else if (strcmp(cmd, "prev") == 0) {
+
+    } else if (strcmp(cmd, "play") == 0) {
+        esp_hf_client_reject_call();
+    } else if (strcmp(cmd, "vol_up") == 0) {
+    
+    } else if (strcmp(cmd, "vol_down") == 0) {
+
+    } else if (strcmp(cmd, "vol_stop") == 0) {
+
     }
     else {
         struct split_result parts[5];
