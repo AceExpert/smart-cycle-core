@@ -38,12 +38,12 @@ void set_on_speaker_connect(void (*callb)()) {
 
 void in_call() {
     hfp_on = 1;
-    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
     i2s_stop(I2S_NUM_1);
     i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, I2S_CHANNEL_STEREO);
     i2s_start(I2S_NUM_1);
     //esp_hf_client_pcm_resample_init(16000, 16, 2);
     esp_a2d_reconfig_samp_rate(16000);
+    esp_a2d_source_disconnect(speaker_addr);
     esp_a2d_source_disconnect(speaker_addr);
 
 
@@ -59,11 +59,11 @@ void in_call() {
 void end_call() {
     hfp_on = 0;
     hfp_off = 1;
-    esp_hf_ag_audio_disconnect(speaker_addr);
     i2s_stop(I2S_NUM_1);
     i2s_set_clk(I2S_NUM_1, 44100, I2S_DATA_BIT_WIDTH_16BIT, 2);
     i2s_start(I2S_NUM_1);
     esp_a2d_reconfig_samp_rate(44100);
+    esp_a2d_source_disconnect(speaker_addr);
     esp_a2d_source_disconnect(speaker_addr);
 
     /*if(aud_suspend) {
@@ -185,6 +185,7 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     case ESP_A2D_PROF_STATE_EVT: {
         if (param->a2d_prof_stat.init_state == ESP_A2D_INIT_SUCCESS) {
             esp_a2d_source_connect(speaker_addr);
+            //esp_hf_ag_slc_connect(speaker_addr);
         }
         break;
     }
@@ -194,7 +195,7 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
             if(callbacks.speaker_connected) callbacks.speaker_connected();
             printf("Speaker connected.\n");
-            esp_hf_ag_slc_connect(speaker_addr);
+            if(!hfp_on && !hfp_off) esp_hf_ag_slc_connect(speaker_addr);
             esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
@@ -302,6 +303,7 @@ void esp_hf_ag_cb(esp_hf_cb_event_t event, esp_hf_cb_param_t* param) {
     case ESP_HF_CONNECTION_STATE_EVT:
         if(param->conn_stat.state == ESP_HF_CONNECTION_STATE_SLC_CONNECTED) {
             printf("HFP Ag connected.\n");
+            //esp_a2d_source_connect(speaker_addr);
             /*if(hfp_on) {
                 esp_hf_ag_audio_connect(param->conn_stat.remote_bda);
                 hfp_on = 0;
