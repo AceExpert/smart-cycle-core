@@ -186,9 +186,9 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         char cmd[22] = ".audio_connect ";
                         strcat(cmd, (const char*)param->write.bda);
                         cmd[21] = '\n';
-                        uart_write_bytes(UART_NUM_2, cmd, 22);
+                        send_uart_cmd(UART_NUM_2, cmd, 22);
                     } else if (match("audio_disconn", res[1].text, 13, res[1].len)) {
-                        uart_write_bytes(UART_NUM_2, ".audio_disconn\n", 15);
+                        send_uart_cmd(UART_NUM_2, ".audio_disconn\n", 15);
                     }
                 };
             }
@@ -238,7 +238,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
             cycle_callbacks.locked();
         }
         esp_ble_gap_start_advertising(&adv_params);
-        uart_write_bytes(UART_NUM_2, ".audio_disconn\n", 15);
+        send_uart_cmd(UART_NUM_2, ".audio_disconn\n", 15);
         break;
     }
 

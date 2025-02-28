@@ -12,8 +12,8 @@
 
 #include "source.h"
 
-
 FILE* play_file = NULL;
+FILE* cus_play_file = NULL;
 struct local_playlist* playlist = NULL;
 
 i2s_chan_handle_t* i2s_chan;
@@ -23,6 +23,8 @@ static esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
 uint8_t hfp_on = 0;
 uint8_t hfp_off = 0;
 uint8_t aud_suspend = 1;
+
+char* custom_play_path = NULL;
 
 struct source_callbacks callbacks = {
     .speaker_connected = NULL,
@@ -34,6 +36,10 @@ void i2s_handle_set(i2s_chan_handle_t* chan) {
 
 void set_on_speaker_connect(void (*callb)()) {
     callbacks.speaker_connected = callb;
+}
+
+void set_custom_play(const char* path) {
+    custom_play_path = path;
 }
 
 void in_call() {
@@ -270,7 +276,20 @@ void recv_call_voice(const uint8_t *buf, uint32_t len) {
 
 int32_t send_audio(uint8_t* buf, int32_t len) {
     if (buf == NULL || len == 0) return 0;
-    if (playlist) {
+    if(cus_play_file && custom_play_path == NULL) {
+        fclose(cus_play_file);
+        cus_play_file = NULL;
+    } 
+    if (custom_play_path) {
+        if(cus_play_file == NULL)
+            cus_play_file = fopen(custom_play_path, "r");
+        else if (feof(cus_play_file) != 0) {
+            fseek(cus_play_file, 0, SEEK_SET);
+        } else {
+            return fread(buf, 1, len, cus_play_file);
+        }
+    }
+    else if (playlist) {
         if(play_file == NULL) play_file = fopen(playlist->play, "r");
         if(feof(play_file) != 0) {
             if(playlist->repeat) {

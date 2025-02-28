@@ -62,6 +62,8 @@ enum MEDIA_CONTROLS {
     JOIN,
     HORN,
     HORN_STOP,
+    REV,
+    REV_STOP,
 };
 
 struct media_cmd {
@@ -305,7 +307,7 @@ void on_speaker_connect() {
 
 void cycle_unlocked() {
     unlocked = 1;
-    uart_write_bytes(UART_NUM_2, ".unlocked\n", 10);
+    send_uart_cmd(UART_NUM_2, ".unlocked\n", 10);
     add_playlist("/sdcard/startup.pcm", 0);
     //add_playlist("/sdcard/music.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
@@ -316,12 +318,14 @@ void cycle_locked() {
     unlocked = 0;
     cruise = 0;
     i2s_handle_set(NULL);
-    uart_write_bytes(UART_NUM_2, ".locked\n", 8);
+    send_uart_cmd(UART_NUM_2, ".locked\n", 8);
     adc_continuous_stop(adc_handle);
 }
 
 void process_cmd(const char* cmd) {
-    if(strcmp(cmd, "audio_play") == 0) {
+    if (strcmp(cmd, "ack") == 0) {
+        acked();
+    } else if(strcmp(cmd, "audio_play") == 0) {
         if(!cruise) {
             cruise = 1;
             cruise_mode();
@@ -378,6 +382,7 @@ void monitor_motion(void*) {
                 uart_cmd = realloc(uart_cmd, cmd_len+1);
                 uart_cmd[cmd_len] = 0;
                 cmd_len = 0;
+                uart_write_bytes(UART_NUM_2, ".ack\n", 5);
                 process_cmd((const char*)uart_cmd);
                 free(uart_cmd);
                 uart_cmd = malloc(0);
@@ -395,38 +400,44 @@ void monitor_motion(void*) {
             {
             case PREV:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".prev", false);
-                uart_write_bytes(UART_NUM_2, ".prev", 5);
+                send_uart_cmd(UART_NUM_2, ".prev", 5);
                 break;
             
             case NEXT:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".next", false);
-                uart_write_bytes(UART_NUM_2, ".next", 5);
+                send_uart_cmd(UART_NUM_2, ".next", 5);
                 break;
 
             case PLAY_PAUSE:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".play", false);
-                uart_write_bytes(UART_NUM_2, ".play", 5);
+                send_uart_cmd(UART_NUM_2, ".play", 5);
                 break;
 
             case VOL_UP:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 7, (uint8_t*)".vol_up", false);
-                uart_write_bytes(UART_NUM_2, ".vol_up", 7);
+                send_uart_cmd(UART_NUM_2, ".vol_up", 7);
                 break;
 
             case VOL_DOWN:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (uint8_t*)".vol_down", false);
-                uart_write_bytes(UART_NUM_2, ".vol_down", 9);
+                send_uart_cmd(UART_NUM_2, ".vol_down", 9);
                 break;
 
             case VOL_STOP:
                 esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (uint8_t*)".vol_stop", false);
-                uart_write_bytes(UART_NUM_2, ".vol_stop", 9);
+                send_uart_cmd(UART_NUM_2, ".vol_stop", 9);
                 break;
 
             case HORN:
+                set_custom_play("/sdcard/horn.pcm");
                 break;
 
+            case REV:
+                set_custom_play("/sdcard/rev.pcm");
+
+            case REV_STOP:
             case HORN_STOP:
+                set_custom_play(NULL);
                 break;
 
             default: {
