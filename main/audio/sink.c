@@ -11,6 +11,7 @@
 #include "esp_avrc_api.h"
 #include "esp_hf_client_api.h"
 
+#include "../utils/main.h"
 #include "sink.h"
 
 uint32_t sample_rate = 44100;
@@ -74,11 +75,11 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
             //i2s_channel_enable(*tx_chan);
             i2s_start(I2S_NUM_1);
-            uart_write_bytes(UART_NUM_2, ".audio_play\n", 12); 
+            send_uart_cmd(UART_NUM_2, ".audio_play\n", 12); 
             printf("Phone connected.\n");
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
-            uart_write_bytes(UART_NUM_2, ".audio_stop\n", 12); 
+            send_uart_cmd(UART_NUM_2, ".audio_stop\n", 12); 
             i2s_stop(I2S_NUM_1);
             //i2s_channel_disable(*tx_chan);
             break;
@@ -214,9 +215,9 @@ void hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_t *para
             i2s_stop(I2S_NUM_1);
             i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, 2);
             i2s_start(I2S_NUM_1);
-            uart_write_bytes(UART_NUM_2, ".incall\n", 8);
+            send_uart_cmd(UART_NUM_2, ".incall\n", 8);
         } else if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED) {
-            uart_write_bytes(UART_NUM_2, ".endcall\n", 9);
+            send_uart_cmd(UART_NUM_2, ".endcall\n", 9);
             i2s_stop(I2S_NUM_0);
             i2s_stop(I2S_NUM_1);
             i2s_set_clk(I2S_NUM_1, sample_rate, I2S_DATA_BIT_WIDTH_16BIT, 2);

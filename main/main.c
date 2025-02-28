@@ -388,7 +388,9 @@ void on_gps_disconnected(int phone_sock) {
 }
 
 void process_cmd(const char* cmd) {
-    if(strcmp(cmd, "alert") == 0) {
+    if (strcmp(cmd, "ack") == 0) {
+        acked();
+    } else if(strcmp(cmd, "alert") == 0) {
         if(phone_connected) {
             send(phone_socket, "$alert\n", 7, 0);
         } else {
@@ -448,6 +450,7 @@ void uart_cmd_task(void*) {
                 uart_cmd = realloc(uart_cmd, cmd_len+1);
                 uart_cmd[cmd_len] = 0;
                 cmd_len = 0;
+                uart_write_bytes(UART_NUM_2, ".ack\n", 5);
                 process_cmd((const char*)uart_cmd);
                 free(uart_cmd);
                 uart_cmd = malloc(0);
@@ -479,10 +482,10 @@ void uart_cmd_task(void*) {
                         if ((time(NULL) - turb_time) >= (unlocked ? 1 : 2)) {
                             if(unlocked) {
                                 cruise = 1;
-                                uart_write_bytes(UART_NUM_2, ".cruise\n", 8);
+                                send_uart_cmd(UART_NUM_2, ".cruise\n", 8);
                             } else {
                                 process_cmd("alert");
-                                uart_write_bytes(UART_NUM_2, ".alert\n", 7);
+                                send_uart_cmd(UART_NUM_2, ".alert\n", 7);
                                 //printf("alert\n");
                                 alert_time = time(NULL);
                             };
@@ -497,7 +500,7 @@ void uart_cmd_task(void*) {
                             turb_stop = 0;
                             turb_time = 0;
                             alert_time = 0;
-                            uart_write_bytes(UART_NUM_2, ".alert_stop\n", 12);
+                            send_uart_cmd(UART_NUM_2, ".alert_stop\n", 12);
                             //printf("alert stop\n");
                         }
                     } 
