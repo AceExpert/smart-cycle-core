@@ -84,7 +84,7 @@ void progress_uart_queue() {
     xTimerReset(uart_timer, portMAX_DELAY);
 }
 
-int send_uart_cmd(uart_port_t port, void* src, size_t size) {
+void send_uart_cmd(uart_port_t port, void* src, size_t size) {
     add_uart_queue(port, src, size);
     if (uart_q && uart_q->next == NULL) {
         progress_uart_queue();

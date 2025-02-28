@@ -292,7 +292,7 @@ void app_main(void)
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
 
     setup_adc();
-    //mount_sdcard();
+    mount_sdcard();
     start_bluetooth();
     setup_ble();
 
