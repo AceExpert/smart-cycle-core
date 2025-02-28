@@ -49,6 +49,7 @@ clock_t last_tap[2] = {0, 0};
 
 uint8_t vol_ctrl[2] = {0, 0};
 uint8_t horn = 0;
+uint8_t rev = 0;
 
 int taps[2] = {0, 0};
 
@@ -533,9 +534,14 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
             tap_end[i] = 0;
             force_start[i] = clock();
         } else if (clock() - force_start[i] >= 400 && final_val < 3801 && !vol_ctrl[i]) {
-            if(force_start[j] && ABS(force_start[i] - force_start[j]) <= 100) {
-                horn = 1;
-                add_media(&media_cmds, HORN, 0);
+            if(force_start[j] && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])) {
+                if(taps[i] == 1 || taps[j] == 1) {
+                    rev = 1;
+                    add_media(&media_cmds, REV, 0);
+                } else {
+                    horn = 1;
+                    add_media(&media_cmds, HORN, 0);
+                };
                 vol_ctrl[i] = 1;
                 vol_ctrl[j] = 1;
             } else {
@@ -568,6 +574,9 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
                 if(horn) {
                     horn = 0;
                     add_media(&media_cmds, HORN_STOP, 0);
+                } else if (rev) {
+                    rev = 0;
+                    add_media(&media_cmds, REV_STOP, 0);
                 }
                 add_media(&media_cmds, VOL_STOP, 0);
                 vol_ctrl[i] = 0;
