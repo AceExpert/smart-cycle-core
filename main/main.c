@@ -435,6 +435,7 @@ void monitor_motion(void*) {
 
             case REV:
                 set_custom_play("/sdcard/rev.pcm");
+                break;
 
             case REV_STOP:
             case HORN_STOP:
