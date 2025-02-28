@@ -349,13 +349,13 @@ void app_main(void)
     };
 
     i2c_new_master_bus(&mpu_bus_cfg, &mpu_bus);
-    //i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
+    i2c_master_bus_add_device(mpu_bus, &mpu_cfg, &mpu_handle);
     
     uint8_t reset[2] = {*mpu_addr, 0};
     uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
 
-    //i2c_master_transmit(mpu_handle, reset, 2, -1);
-    //i2c_master_transmit(mpu_handle, cfg, 2, -1);
+    i2c_master_transmit(mpu_handle, reset, 2, -1);
+    i2c_master_transmit(mpu_handle, cfg, 2, -1);
 
     //set_i2s_tx_chan(&i2s_tx);
     //set_i2s_rx_chan(&mic_rx);
@@ -363,7 +363,7 @@ void app_main(void)
     start_bluetooth();
     setup_gps();
 
-    //xTaskCreate(uart_cmd_task, "uart_cmd_task", 3584, NULL, 4, uart_task);
+    xTaskCreate(uart_cmd_task, "uart_cmd_task", 3584, NULL, 4, uart_task);
 }
 
 void send_gps(const char* tag, struct gps_info gpsinfo) {
