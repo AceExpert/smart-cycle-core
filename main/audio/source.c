@@ -286,7 +286,8 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
         else if (feof(cus_play_file) != 0) {
             fseek(cus_play_file, 0, SEEK_SET);
         } else {
-            return fread(buf, 1, len, cus_play_file);
+            fread(buf, 1, len, cus_play_file);
+            return len;
         }
     }
     else if (playlist) {
@@ -306,7 +307,8 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
                 }
             }
         }
-        return fread(buf, 1, len, play_file);
+        fread(buf, 1, len, play_file);
+        return len;
     } else if (i2s_chan) {
         size_t read;
         //i2s_channel_read(*i2s_chan, buf, len, NULL, pdMS_TO_TICKS(10));

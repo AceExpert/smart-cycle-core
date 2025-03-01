@@ -312,7 +312,7 @@ void cycle_unlocked() {
     add_playlist("/sdcard/startup.pcm", 0);
     //add_playlist("/sdcard/music.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    adc_continuous_start(adc_handle);
+    //adc_continuous_start(adc_handle);
 }
 
 void cycle_locked() {
