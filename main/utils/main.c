@@ -26,10 +26,11 @@ void add_uart_queue(uart_port_t port, void* src, size_t size) {
         while (upd_ptr->next) {
             upd_ptr = upd_ptr->next;
         }
+        upd_ptr->next = malloc(sizeof(struct safe_uart_queue));
+        upd_ptr = upd_ptr->next;
     };
-    char* d = malloc(size);
-    strcpy(d, src);
-    upd_ptr->data = d;
+    upd_ptr->data = malloc(size);
+    memcpy(upd_ptr->data, src, size);
     upd_ptr->port = port;
     upd_ptr->size = size;
     upd_ptr->next = NULL;
