@@ -51,6 +51,7 @@ uint8_t to_alert = 0;
 
 uint8_t cruise = 0;
 uint8_t unlocked = 0;
+uint8_t probe_done = 0;
 
 const char* WIFI_SSID[] = {"GUEST_SECURED", "VS", "LBS", "STUDENT_SECURED", "CAMPUS_SECURED", "ACADEMIC_SECURED", "Academic"};
 const char* WIFI_USER = "24IM10016";
@@ -90,6 +91,8 @@ void gps_serv_auth(TimerHandle_t timer) {
 };
 
 void gps_server(void*) {
+
+    send_uart_cmd(UART_NUM_2, ".state\n", 7);
 
     struct sockaddr_in cycle_addr = {
         .sin_addr.s_addr = htonl(IPADDR_ANY),
@@ -397,8 +400,10 @@ void process_cmd(const char* cmd) {
             to_alert = 1;
         };
     } else if (strcmp(cmd, "unlocked") == 0) {
+        probe_done = 1;
         unlocked = 1;
     } else if (strcmp(cmd, "locked") == 0) {
+        probe_done = 1;
         unlocked = 0;
         cruise = 0;
     } else if (strcmp(cmd, "next") == 0) {
@@ -436,7 +441,7 @@ void uart_cmd_task(void*) {
     while(1) {
 
         uint8_t d;
-        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
+        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, pdMS_TO_TICKS(1) / 2);
             
         if(cmd_start) {
             if (read_len < 1) {
@@ -520,7 +525,7 @@ void uart_cmd_task(void*) {
         };
 
         if(!cmd_start)
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(7));
 
     };
     vTaskDelete(NULL);

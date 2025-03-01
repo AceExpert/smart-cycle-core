@@ -156,10 +156,10 @@ void recv_audio(const uint8_t* buf, uint32_t len) {
 
 static uint32_t hf_send_audio(uint8_t *buf, uint32_t len)
 {
-    if(buf == NULL || len < 0) return 0;
+    if(buf == NULL || len == 0) return 0;
     //int16_t data[len / 2];
     size_t num_read;
-    //i2s_read(I2S_NUM_0, buf, len, &num_read, pdMS_TO_TICKS(10));
+    i2s_read(I2S_NUM_0, buf, len, &num_read, pdMS_TO_TICKS(10));
     /*for(int i = 0; i < num_read / 2; i++) {
         //uint16_t temp = data[i] >> 14;
         //uint16_t final_d = (temp > INT16_MAX) ? INT16_MAX : (temp < -INT16_MAX) ? -INT16_MAX : (uint16_t)temp;
