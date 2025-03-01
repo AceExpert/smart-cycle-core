@@ -326,6 +326,12 @@ void cycle_locked() {
 void process_cmd(const char* cmd) {
     if (strcmp(cmd, "ack") == 0) {
         acked();
+    } else if(strcmp(cmd, "state") == 0) {
+        if(unlocked) {
+            send_uart_cmd(UART_NUM_2, ".unlocked\n", 10);
+        } else {
+            send_uart_cmd(UART_NUM_2, ".locked\n", 8);
+        }
     } else if(strcmp(cmd, "audio_play") == 0) {
         if(!cruise) {
             cruise = 1;
