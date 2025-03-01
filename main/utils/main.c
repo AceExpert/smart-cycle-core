@@ -93,7 +93,9 @@ void send_uart_cmd(uart_port_t port, void* src, size_t size) {
 }
 
 void acked() {
-    xTimerStop(uart_timer, portMAX_DELAY);
+    if(uart_timer)
+        if(xTimerIsTimerActive(uart_timer) != pdFAIL)
+            xTimerStop(uart_timer, portMAX_DELAY);
     pop_uart_queue();
     progress_uart_queue();
 }

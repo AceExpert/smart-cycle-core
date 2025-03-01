@@ -383,7 +383,8 @@ void monitor_motion(void*) {
                 uart_cmd = realloc(uart_cmd, cmd_len+1);
                 uart_cmd[cmd_len] = 0;
                 cmd_len = 0;
-                uart_write_bytes(UART_NUM_2, ".ack\n", 5);
+                if(strcmp((const char*)uart_cmd, "ack") != 0)
+                    uart_write_bytes(UART_NUM_2, ".ack\n", 5);
                 process_cmd((const char*)uart_cmd);
                 free(uart_cmd);
                 uart_cmd = malloc(0);
