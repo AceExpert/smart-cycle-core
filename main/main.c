@@ -473,7 +473,7 @@ void uart_cmd_task(void*) {
 
                 double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
     
-                if (ABS(net_a - 10) >= 0.85) {
+                if (ABS(net_a - 10) >= 0.6) {
                     if(alert_time) {
                         alert_time = time(NULL);
                     }
@@ -486,7 +486,7 @@ void uart_cmd_task(void*) {
                             } else {
                                 process_cmd("alert");
                                 send_uart_cmd(UART_NUM_2, ".alert\n", 7);
-                                //printf("alert\n");
+                                printf("alert\n");
                                 alert_time = time(NULL);
                             };
                         };
@@ -501,7 +501,7 @@ void uart_cmd_task(void*) {
                             turb_time = 0;
                             alert_time = 0;
                             send_uart_cmd(UART_NUM_2, ".alert_stop\n", 12);
-                            //printf("alert stop\n");
+                            printf("alert stop\n");
                         }
                     } 
                     else if (turb_stop) {
@@ -519,7 +519,7 @@ void uart_cmd_task(void*) {
         };
 
         if(!cmd_start)
-            vTaskDelay(pdMS_TO_TICKS(7));
+            vTaskDelay(pdMS_TO_TICKS(5));
 
     };
     vTaskDelete(NULL);
