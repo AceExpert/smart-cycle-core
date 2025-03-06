@@ -53,8 +53,8 @@ void direction_indic(int8_t dynam, uint8_t m1, uint8_t m2) {
     switch (dynam)
     {
     case 0: {
-        gpio_set_level(27, m1);
-        gpio_set_level(14, m2);
+        gpio_set_level(26, m1);
+        gpio_set_level(25, m2);
         break;
     }
 
@@ -63,8 +63,8 @@ void direction_indic(int8_t dynam, uint8_t m1, uint8_t m2) {
     }
 
     case -1: {
-        gpio_set_level(27, 0);
-        gpio_set_level(14, 0);
+        gpio_set_level(26, 0);
+        gpio_set_level(25, 0);
         break;
     }
 

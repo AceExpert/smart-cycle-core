@@ -223,8 +223,10 @@ void app_main(void)
 {
     printf("Cytroid starting...\n");
 
-    gpio_set_direction(27, GPIO_MODE_OUTPUT);
-    gpio_set_direction(14, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_26, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_25, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_26, 0);
+    gpio_set_level(GPIO_NUM_25, 0);
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
