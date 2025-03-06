@@ -441,7 +441,7 @@ void uart_cmd_task(void*) {
     while(1) {
 
         uint8_t d;
-        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, pdMS_TO_TICKS(1) / 2);
+        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
             
         if(cmd_start) {
             if (read_len < 1) {
@@ -479,7 +479,7 @@ void uart_cmd_task(void*) {
 
                 double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
     
-                if (ABS(net_a - 10) >= 0.6) {
+                if (ABS(net_a - 10.5) >= 0.6) {
                     if(alert_time) {
                         alert_time = time(NULL);
                     }
