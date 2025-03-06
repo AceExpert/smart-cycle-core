@@ -171,7 +171,7 @@ void setup_adc() {
 
     for (int i = 0; i < 2; i++) {
         uint8_t adc_unit, adc_channel;
-        adc_continuous_io_to_channel(i? 36 : 34, &adc_unit, &adc_channel); 
+        adc_continuous_io_to_channel(i? 33 : 32, &adc_unit, &adc_channel); 
         adc_pattern[i].atten = ADC_ATTEN_DB_12;
         adc_pattern[i].channel = adc_channel;
         adc_pattern[i].unit = adc_unit;
@@ -312,7 +312,7 @@ void cycle_unlocked() {
     add_playlist("/sdcard/startup.pcm", 0);
     //add_playlist("/sdcard/music.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    //adc_continuous_start(adc_handle);
+    adc_continuous_start(adc_handle);
 }
 
 void cycle_locked() {
@@ -407,32 +407,32 @@ void monitor_motion(void*) {
             switch (media_cmds->ctrl)
             {
             case PREV:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".prev", false);
+                esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".prev", false);
                 send_uart_cmd(UART_NUM_2, ".prev", 5);
                 break;
             
             case NEXT:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".next", false);
+                esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".next", false);
                 send_uart_cmd(UART_NUM_2, ".next", 5);
                 break;
 
             case PLAY_PAUSE:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 5, (uint8_t*)".play", false);
+                esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".play", false);
                 send_uart_cmd(UART_NUM_2, ".play", 5);
                 break;
 
             case VOL_UP:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 7, (uint8_t*)".vol_up", false);
+                esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 7, (uint8_t*)".vol_up", false);
                 send_uart_cmd(UART_NUM_2, ".vol_up", 7);
                 break;
 
             case VOL_DOWN:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (uint8_t*)".vol_down", false);
+                esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 9, (uint8_t*)".vol_down", false);
                 send_uart_cmd(UART_NUM_2, ".vol_down", 9);
                 break;
 
             case VOL_STOP:
-                esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, 9, (uint8_t*)".vol_stop", false);
+                esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 9, (uint8_t*)".vol_stop", false);
                 send_uart_cmd(UART_NUM_2, ".vol_stop", 9);
                 break;
 
@@ -523,25 +523,30 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
 {
     adc_digi_output_data_t* final_data = data->conv_frame_buffer;
 
-    for(int k = 0; k < 2;) {
+    int sens = 0;
+
+    for(int k = 0; k < data->size;) {
         double final_val = final_data->type1.data;
 
         int gpio_num;
         adc_continuous_channel_to_io(ADC_UNIT_1, final_data->type1.channel, &gpio_num);
 
-        int i = (int)(gpio_num == 34);
-        int j = (int)(gpio_num != 34);
+        int i = (int)(gpio_num == 33);
+        int j = (int)(gpio_num != 33);
 
-        if(k == 1 && i != 1) {
+        if (k == 0)
+            sens = i;
+
+        if(k > 0 && i == sens) {
             final_data++;
+            k++;
             continue;
         };
-        k++;
 
-        if(final_val < 3801 && !force_start[i]) {
+        if(final_val > 400 && !force_start[i]) { //final_val < 3700 (3801)
             tap_end[i] = 0;
             force_start[i] = clock();
-        } else if (clock() - force_start[i] >= 400 && final_val < 3801 && !vol_ctrl[i]) {
+        } else if (clock() - force_start[i] >= 400 && final_val > 400 && !vol_ctrl[i]) {
             if(force_start[j] && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])) {
                 if(taps[i] == 1 || taps[j] == 1) {
                     rev = 1;
@@ -559,7 +564,7 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
         };
 
         if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
-            if(taps[i] <= 2 && !taps[j]) { 
+            if(taps[i] && !taps[j]) { 
                 if(taps[i] == 1)
                     add_media(&media_cmds, i? NEXT : PREV, 0);
                 tap_end[i] = 0;
@@ -571,11 +576,12 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
                 tap_end[j] = 0;
                 taps[j] = 0;
             };
+            
         }
 
-        if(force_start[i] && final_val > 4000 && !tap_end[i]) {
+        if(force_start[i] && final_val < 100 && !tap_end[i]) { //final_val > 4000 
             clock_t diff = clock() - force_start[i];
-            if(diff <= 300 && diff >= 15) {
+            if(diff < 400 && diff >= 10) {
                 taps[i]++;
                 tap_end[i] = clock();
             } else if (diff >= 400) {
@@ -588,9 +594,16 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
                 }
                 add_media(&media_cmds, VOL_STOP, 0);
                 vol_ctrl[i] = 0;
+            } else {
+                taps[i] = 0;
             }
             force_start[i] = 0;
         }
+
+        if(k > 0) {
+            break;
+        }
+        k++;
     };
     return false;
 }

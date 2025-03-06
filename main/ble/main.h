@@ -21,7 +21,7 @@ static esp_ble_adv_params_t adv_params = {
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
-static struct {
+static struct gatts_prof {
     esp_gatts_cb_t gatts_cb;
     uint16_t gatts_if;
     uint16_t app_id;
@@ -82,3 +82,4 @@ enum CycleState {
 void esp_ble_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
 void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_cb_param_t* param);
 void set_cycle_callback(int state, void (*callback)());
+struct gatts_prof* get_gatts_prof();

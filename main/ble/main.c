@@ -29,6 +29,10 @@ struct {
     void (*unlocked)();
 } cycle_callbacks = {NULL, NULL};
 
+struct gatts_prof* get_gatts_prof() {
+    return gatts_profile;
+}
+ 
 void set_cycle_callback(int state, void (*callback)()) {
     switch (state)
     {
