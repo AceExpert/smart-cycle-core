@@ -391,6 +391,7 @@ void on_gps_disconnected(int phone_sock) {
 }
 
 void process_cmd(const char* cmd) {
+    printf("%s\n", cmd);
     if (strcmp(cmd, "ack") == 0) {
         acked();
     } else if(strcmp(cmd, "alert") == 0) {
@@ -478,7 +479,7 @@ void uart_cmd_task(void*) {
                 accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
 
                 double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
-    
+                
                 if (ABS(net_a - 10.5) >= 0.6) {
                     if(alert_time) {
                         alert_time = time(NULL);
@@ -602,7 +603,10 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
         };
 
         strcpy((char*)(ap_config.sta.password), WIFI_PSWD);
-        //esp_wifi_sta_enterprise_disable();
+
+        strcpy((char*)ap_config.sta.ssid, "SputhNet");
+        strcpy((char*)ap_config.sta.password, "hotspot.sputh");
+        esp_wifi_sta_enterprise_disable();
 
         esp_wifi_set_config(WIFI_IF_STA, &ap_config);
         esp_wifi_connect();
