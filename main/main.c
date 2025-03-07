@@ -410,32 +410,32 @@ void monitor_motion(void*) {
             {
             case PREV:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".prev", false);
-                send_uart_cmd(UART_NUM_2, ".prev", 5);
+                send_uart_cmd(UART_NUM_2, ".prev\n", 6);
                 break;
             
             case NEXT:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".next", false);
-                send_uart_cmd(UART_NUM_2, ".next", 5);
+                send_uart_cmd(UART_NUM_2, ".next\n", 6);
                 break;
 
             case PLAY_PAUSE:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".play", false);
-                send_uart_cmd(UART_NUM_2, ".play", 5);
+                send_uart_cmd(UART_NUM_2, ".play\n", 6);
                 break;
 
             case VOL_UP:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 7, (uint8_t*)".vol_up", false);
-                send_uart_cmd(UART_NUM_2, ".vol_up", 7);
+                send_uart_cmd(UART_NUM_2, ".vol_up\n", 8);
                 break;
 
             case VOL_DOWN:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 9, (uint8_t*)".vol_down", false);
-                send_uart_cmd(UART_NUM_2, ".vol_down", 9);
+                send_uart_cmd(UART_NUM_2, ".vol_down\n", 10);
                 break;
 
             case VOL_STOP:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 9, (uint8_t*)".vol_stop", false);
-                send_uart_cmd(UART_NUM_2, ".vol_stop", 9);
+                send_uart_cmd(UART_NUM_2, ".vol_stop\n", 10);
                 break;
 
             case HORN:
