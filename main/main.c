@@ -391,7 +391,6 @@ void on_gps_disconnected(int phone_sock) {
 }
 
 void process_cmd(const char* cmd) {
-    printf("%s\n", cmd);
     if (strcmp(cmd, "ack") == 0) {
         acked();
     } else if(strcmp(cmd, "alert") == 0) {
@@ -479,7 +478,7 @@ void uart_cmd_task(void*) {
                 accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
 
                 double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
-                
+
                 if (ABS(net_a - 10.5) >= 0.6) {
                     if(alert_time) {
                         alert_time = time(NULL);
