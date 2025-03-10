@@ -440,15 +440,20 @@ void monitor_motion(void*) {
 
             case HORN:
                 set_custom_play("/sdcard/horn.pcm");
+                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
                 break;
 
             case REV:
                 set_custom_play("/sdcard/rev.pcm");
+                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
                 break;
 
             case REV_STOP:
             case HORN_STOP:
                 set_custom_play(NULL);
+                if(i2s_handle_get() == NULL) {
+                    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+                }
                 break;
 
             default: {
@@ -549,7 +554,7 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
             tap_end[i] = 0;
             force_start[i] = clock();
         } else if (clock() - force_start[i] >= 400 && final_val > 400 && !vol_ctrl[i]) {
-            if(force_start[j] && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])) {
+            if(force_start[j] && (force_start[i])) { // && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])
                 if(taps[i] == 1 || taps[j] == 1) {
                     rev = 1;
                     add_media(&media_cmds, REV, 0);
@@ -577,8 +582,16 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
                 taps[i] = 0;
                 tap_end[j] = 0;
                 taps[j] = 0;
-            };
-            
+            } else {
+                if(tap_end[i]) {
+                    tap_end[i] = 0;
+                } 
+                if(tap_end[j]) {
+                    tap_end[j] = 0;
+                }
+                if(taps[i]) taps[i] = 0;
+                if(taps[j]) taps[j] = 0;
+            };   
         }
 
         if(force_start[i] && final_val < 100 && !tap_end[i]) { //final_val > 4000 

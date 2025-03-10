@@ -28,6 +28,7 @@ void add_playlist(const char* path, uint8_t repeat);
 void clear_playlist(int index);
 void cruise_mode();
 void i2s_handle_set(i2s_chan_handle_t* chan);
+i2s_chan_handle_t* i2s_handle_get();
 void set_on_speaker_connect(void (*)());
 void set_custom_play(const char* path);
 void in_call();

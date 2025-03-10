@@ -16,7 +16,7 @@ FILE* play_file = NULL;
 FILE* cus_play_file = NULL;
 struct local_playlist* playlist = NULL;
 
-i2s_chan_handle_t* i2s_chan;
+i2s_chan_handle_t* i2s_chan = NULL;
 
 static esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
 
@@ -32,6 +32,10 @@ struct source_callbacks callbacks = {
 
 void i2s_handle_set(i2s_chan_handle_t* chan) {
     i2s_chan = chan;
+}
+
+i2s_chan_handle_t* i2s_handle_get() {
+    return i2s_chan;
 }
 
 void set_on_speaker_connect(void (*callb)()) {
