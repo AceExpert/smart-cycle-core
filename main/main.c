@@ -609,6 +609,7 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
                 }
                 add_media(&media_cmds, VOL_STOP, 0);
                 vol_ctrl[i] = 0;
+                taps[i] = 0;
             } else {
                 taps[i] = 0;
             }
