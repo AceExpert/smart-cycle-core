@@ -402,10 +402,15 @@ void process_cmd(const char* cmd) {
     } else if (strcmp(cmd, "unlocked") == 0) {
         probe_done = 1;
         unlocked = 1;
+        if(reconnect_timer != NULL && xTimerIsTimerActive(reconnect_timer) != pdFALSE) xTimerStop(reconnect_timer, portMAX_DELAY);
+        esp_wifi_disconnect();
     } else if (strcmp(cmd, "locked") == 0) {
         probe_done = 1;
         unlocked = 0;
         cruise = 0;
+        if(reconnect_timer == NULL)
+            reconnect_timer = xTimerCreate("reconn_timer", pdMS_TO_TICKS(9000), pdFALSE, NULL, reconnect);
+        xTimerReset(reconnect_timer, portMAX_DELAY);
     } else if (strcmp(cmd, "next") == 0) {
         esp_hf_client_answer_call();
     } else if (strcmp(cmd, "prev") == 0) {
@@ -622,7 +627,8 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
         } else {
             if(reconnect_timer == NULL)
                 reconnect_timer = xTimerCreate("reconn_timer", pdMS_TO_TICKS(9000), pdFALSE, NULL, reconnect);
-            xTimerReset(reconnect_timer, portMAX_DELAY);
+            if(!unlocked)
+                xTimerReset(reconnect_timer, portMAX_DELAY);
         }
         break;
     }
