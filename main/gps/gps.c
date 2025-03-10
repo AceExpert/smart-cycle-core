@@ -9,10 +9,10 @@
 TimerHandle_t gps_timer = NULL;
 
 struct {
-    void (*on_gps)(const char*, struct gps_info);
+    void (*on_gps)(const char*, struct gps_info, int tlen);
 } gps_callbacks = {NULL};
 
-void set_on_gps(void (*on_gps)(const char*, struct gps_info)) {
+void set_on_gps(void (*on_gps)(const char*, struct gps_info, int tlen)) {
     gps_callbacks.on_gps = on_gps;
 }
 
@@ -63,7 +63,7 @@ void read_gps(TimerHandle_t timer) {
                 tag = realloc(tag, t_len+1);
                 if(t_len >= 6) {
                     if(data == '\n') {
-                        tag[t_len++] = 0;
+                        tag[t_len++] = '\n';
                         break;
                     };
                 };
@@ -82,14 +82,15 @@ void read_gps(TimerHandle_t timer) {
     };
 
     free(tag);
-    tag = "$GPGGA,1783.0,3232.32656,N,9583.43344,E,0,00,99.99,,,,,,*48";
+    tag = "$GPGGA,1783.0,3232.32656,N,9583.43344,E,0,00,99.99,,,,,,*48\n";
+    t_len = 60;
     
     sscanf(tag, "$GPGGA,%lf,%lf,%c,%lf,%c,", &(gp_info.utc), &(gp_info.lat), &(gp_info.lat_dir), &(gp_info.logt), &(gp_info.logt_dir));
     
     printf("%s | utc = %lf , lat = %lf %c , longt = %lf %c\n", tag, gp_info.utc, gp_info.lat, gp_info.lat_dir, gp_info.logt, gp_info.logt_dir);
     
     if(gps_callbacks.on_gps != NULL) {
-        gps_callbacks.on_gps(tag, gp_info);
+        gps_callbacks.on_gps(tag, gp_info, t_len);
     }
 
     //free(tag);

@@ -64,7 +64,7 @@ void cycle_unlocked();
 void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 void ip_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 void reconnect(TimerHandle_t timer);
-void send_gps(const char* tag, struct gps_info gpsinfo);
+void send_gps(const char* tag, struct gps_info gpsinfo, int tlen);
 void on_gps_connected(int phone_sock);
 void on_gps_disconnected(int phone_sock);
 void uart_cmd_task(void*);
@@ -369,9 +369,9 @@ void app_main(void)
     xTaskCreate(uart_cmd_task, "uart_cmd_task", 3584, NULL, 4, uart_task);
 }
 
-void send_gps(const char* tag, struct gps_info gpsinfo) {
+void send_gps(const char* tag, struct gps_info gpsinfo, int tlen) {
     if(phone_connected) {
-        send(phone_socket, tag, strlen(tag), 0);
+        send(phone_socket, tag, tlen, 0);
     };
 }
 
