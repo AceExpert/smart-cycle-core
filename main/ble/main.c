@@ -99,7 +99,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
         gatts_profile[0].service_id.id.uuid.len = ESP_UUID_LEN_16;
         gatts_profile[0].service_id.id.uuid.uuid.uuid16 = 0x00ff;
 
-        esp_ble_gap_set_device_name("Cytroid-BR");
+        esp_ble_gap_set_device_name("Cytroid Dragon's Breathe");
         
         esp_ble_gatts_create_service(itf, &gatts_profile->service_id, 4);
 

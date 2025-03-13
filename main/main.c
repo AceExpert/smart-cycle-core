@@ -117,7 +117,7 @@ void start_bluetooth() {
     esp_bluedroid_init();
     esp_bluedroid_enable();
     
-    esp_bt_gap_set_device_name("Cytroid BR");
+    esp_bt_gap_set_device_name("Cytroid Dragon's Breathe");
     esp_bt_gap_register_callback(bt_gap_cb);
     
     esp_avrc_ct_init();
@@ -603,9 +603,13 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
                 if(horn) {
                     horn = 0;
                     add_media(&media_cmds, HORN_STOP, 0);
+                    taps[j] = 0;
+                    vol_ctrl[j] = 0;
                 } else if (rev) {
                     rev = 0;
                     add_media(&media_cmds, REV_STOP, 0);
+                    taps[j] = 0;
+                    vol_ctrl[j] = 0;
                 }
                 add_media(&media_cmds, VOL_STOP, 0);
                 vol_ctrl[i] = 0;
