@@ -73,9 +73,11 @@ void process_cmd(const char*);
 TimerHandle_t reconnect_timer = NULL;
 TimerHandle_t gps_server_auth = NULL;
 TimerHandle_t alert_timer = NULL;
+TimerHandle_t gps_alive = NULL;
 
 int phone_socket = 0;
 uint8_t phone_connected = 0;
+uint8_t phone_auth = 0;
 
 static char* SERV_TOKEN = "auth 1234";
 
@@ -84,67 +86,175 @@ static struct {
     void (*on_disconnected)(int sock_fd);
 } gps_server_callbacks;
 
+int get_max(int* arr, size_t len) {
+    int max = *arr;
+    for(int i = 1; i < len; i++) {
+        if(arr[i] > max) max = arr[i];
+    }
+    return max;
+}
+
 void gps_serv_auth(TimerHandle_t timer) {
+    if(phone_connected && !phone_auth) {
+        phone_connected = 0;
+        phone_auth = 0;
+        close(phone_socket);
+    }
+};
+
+void gps_serv_alive(TimerHandle_t timer) {
     if(phone_connected) {
         close(phone_socket);
+        phone_connected = 0;
+        phone_auth = 0;
+        if(xTimerIsTimerActive(gps_alive) != pdFALSE) {
+            xTimerStop(gps_alive, portMAX_DELAY);
+        }
     }
 };
 
 void gps_server(void*) {
 
     send_uart_cmd(UART_NUM_2, ".state\n", 7);
-
+    
     struct sockaddr_in cycle_addr = {
         .sin_addr.s_addr = htonl(IPADDR_ANY),
         .sin_port = htons(3000),
         .sin_family = AF_INET,
     };
+    struct sockaddr_in udp_m_addr = {
+        .sin_addr.s_addr = htonl(IPADDR_ANY),
+        .sin_port = htons(5007),
+        .sin_family = AF_INET,
+    };
 
+    int udp_multi = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+
+    int flags = fcntl(sock, F_GETFL);
+    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
     int opt = 1;
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(udp_multi, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     bind(sock, (struct sockaddr*)&cycle_addr, sizeof(cycle_addr));
+    bind(udp_multi, (struct sockaddr*)&udp_m_addr, sizeof(udp_m_addr));
+
+    uint8_t ttl = 1;
+    setsockopt(udp_multi, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(uint8_t));
+
+    struct ip_mreq imreq = {0};
+    struct in_addr iaddr = {0};
+
+    imreq.imr_interface.s_addr = htonl(IPADDR_ANY);
+    inet_aton("239.0.1.2", &imreq.imr_multiaddr.s_addr);
+
+    setsockopt(udp_multi, IPPROTO_IP, IP_MULTICAST_IF, &iaddr, sizeof(struct in_addr));
+    setsockopt(udp_multi, IPPROTO_IP, IP_ADD_MEMBERSHIP, &imreq, sizeof(struct ip_mreq));
 
     listen(sock, 3);
 
     struct sockaddr_in phone_addr;
     socklen_t addr_len = sizeof(phone_addr);
+    
+    char data[257];
 
     while(1) {
-        phone_socket = accept(sock, (struct sockaddr*)&phone_addr, &addr_len);
-        phone_connected = 1;
-        if(gps_server_auth == NULL)
-            gps_server_auth = xTimerCreate("gps_server_auth", pdMS_TO_TICKS(30000), pdFALSE, NULL, gps_serv_auth);
-        xTimerReset(gps_server_auth, portMAX_DELAY);
 
-        while(1) {
-            char data[256];
+        struct timeval timeout = {
+            .tv_sec = 7,
+            .tv_usec = 0,
+        };
 
-            int len = recv(phone_socket, data, 256, 0);
-            
-            if(len == -1) {
-                phone_connected = 0;
-                if(xTimerIsTimerActive(gps_server_auth) != pdFALSE) {
-                    xTimerStop(gps_server_auth, portMAX_DELAY);
+        struct fd_set rds;
+        struct fd_set wds;
+        FD_ZERO(&rds);
+        FD_ZERO(&wds);
+        FD_SET(udp_multi, &rds);
+        if(!phone_connected) {
+            FD_SET(sock, &rds);
+        } else {
+            FD_SET(phone_socket, &rds);
+            if(phone_auth && to_alert) {
+                FD_SET(phone_socket, &wds);
+            }
+        };
+    
+        int socks[3] = {sock, udp_multi, phone_socket};
+        if(select(get_max(socks, phone_connected? 3 : 2) + 1, &rds, &wds, NULL, &timeout) > 0) {
+        
+            if(FD_ISSET(udp_multi, &rds) != 0) {
+                printf(" s3\n");
+
+                struct sockaddr_in saddr;
+                socklen_t saddr_len = sizeof(saddr);
+
+                char udp_data[256];
+                int len = recvfrom(udp_multi, udp_data, 256, 0, (struct sockaddr*)&saddr, &saddr_len);
+                if(len && match("cytroid gps", udp_data, 11, len)) {
+                    sendto(udp_multi, "cytroid gps", 11, 0, (struct sockaddr*)&saddr, saddr_len);
                 }
-                gps_server_callbacks.on_disconnected(phone_socket);
-                break;
             }
 
-            if(xTimerIsTimerActive(gps_server_auth) != pdFALSE) {
-                if(!match(SERV_TOKEN, data, 9, len)) {
-                    phone_connected = 0;
-                    close(phone_socket);
-                    xTimerStop(gps_server_auth, portMAX_DELAY);
-                    break;
+            if(!phone_connected) {
+                if(FD_ISSET(sock, &rds) != 0) {
+                    phone_socket = accept(sock, (struct sockaddr*)&phone_addr, &addr_len);
+                    phone_connected = 1;
+                    phone_auth = 0;
+                    flags = fcntl(phone_socket, F_GETFL);
+                    fcntl(phone_socket, F_SETFL, flags | O_NONBLOCK);
+                    if(gps_server_auth == NULL)
+                        gps_server_auth = xTimerCreate("gps_server_auth", pdMS_TO_TICKS(30000), pdFALSE, NULL, gps_serv_auth);
+                    xTimerReset(gps_server_auth, portMAX_DELAY);
                 }
-                xTimerStop(gps_server_auth, portMAX_DELAY);
-                gps_server_callbacks.on_authorized(phone_socket);
-                if(to_alert) {
-                    to_alert = 0;
-                    send(phone_socket, "$alert\n", 7, 0);
+            } else {
+
+                if(FD_ISSET(phone_socket, &rds) != 0) {
+                    int dlen = recv(phone_socket, data, 256, 0);
+                    data[dlen] = 0;
+                    printf("%d: %s\n", dlen, data);
+                    if (dlen <= 0) {
+                        phone_connected = 0;
+                        phone_auth = 0;
+                        if(xTimerIsTimerActive(gps_server_auth) != pdFALSE)
+                            xTimerStop(gps_server_auth, portMAX_DELAY);
+                        if(xTimerIsTimerActive(gps_alive) != pdFALSE) {
+                            xTimerStop(gps_alive, portMAX_DELAY);
+                        }
+                        gps_server_callbacks.on_disconnected(phone_socket);
+                    } else if(!phone_auth) {
+                        if(!match(SERV_TOKEN, data, 9, dlen)) {
+                            phone_connected = 0;
+                            phone_auth = 0;
+                            close(phone_socket);
+                            if(xTimerIsTimerActive(gps_server_auth) != pdFALSE)
+                                xTimerStop(gps_server_auth, portMAX_DELAY);
+                            if(xTimerIsTimerActive(gps_alive) != pdFALSE) {
+                                xTimerStop(gps_alive, portMAX_DELAY);
+                            }
+                        } else {
+                            phone_auth = 1;
+                            if(xTimerIsTimerActive(gps_server_auth) != pdFALSE)
+                                xTimerStop(gps_server_auth, portMAX_DELAY);
+                            gps_server_callbacks.on_authorized(phone_socket);
+                        }
+                    } else {
+                        if(match(".heartbeat", data, 10, dlen)) {
+                            if(gps_alive != NULL) {
+                                if(xTimerIsTimerActive(gps_alive) != pdFALSE) {
+                                    xTimerStop(gps_alive, portMAX_DELAY);
+                                }
+                            }
+                        }
+                    }
+                };
+                
+                if (FD_ISSET(phone_socket, &wds) != 0) {
+                    if(to_alert) {
+                        to_alert = 0;
+                        send(phone_socket, "$alert\n", 7, 0);
+                    }
                 }
             }
         }
@@ -370,13 +480,17 @@ void app_main(void)
 }
 
 void send_gps(const char* tag, struct gps_info gpsinfo, int tlen) {
-    if(phone_connected) {
+    if(phone_connected && phone_auth) {
         send(phone_socket, tag, tlen, 0);
+        if(gps_alive == NULL) 
+            gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(15000), pdFALSE, NULL, gps_serv_alive);
+        if(xTimerIsTimerActive(gps_alive) == pdFALSE)
+            xTimerReset(gps_alive, portMAX_DELAY);
     };
 }
 
 void send_alert(TimerHandle_t timer) {
-    if(phone_connected) {
+    if(phone_connected && phone_auth) {
         send(phone_socket, "$alert\n", 7, 0);
         xTimerStop(timer, portMAX_DELAY);
     };
@@ -394,7 +508,7 @@ void process_cmd(const char* cmd) {
     if (strcmp(cmd, "ack") == 0) {
         acked();
     } else if(strcmp(cmd, "alert") == 0) {
-        if(phone_connected) {
+        if(phone_connected && phone_auth) {
             send(phone_socket, "$alert\n", 7, 0);
         } else {
             to_alert = 1;
@@ -555,7 +669,7 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
     {
     case WIFI_EVENT_STA_CONNECTED: {
         
-        if(reconnect_timer != NULL && xTimerIsTimerActive(reconnect_timer) == pdTRUE) xTimerStop(reconnect_timer, portMAX_DELAY);
+        if(reconnect_timer != NULL && xTimerIsTimerActive(reconnect_timer) != pdFALSE) xTimerStop(reconnect_timer, portMAX_DELAY);
 
         printf("Wifi connected\n");
         break;
@@ -608,9 +722,9 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
 
         strcpy((char*)(ap_config.sta.password), WIFI_PSWD);
 
-        strcpy((char*)ap_config.sta.ssid, "SputhNet");
-        strcpy((char*)ap_config.sta.password, "hotspot.sputh");
-        esp_wifi_sta_enterprise_disable();
+        //strcpy((char*)ap_config.sta.ssid, "SputhNet");
+        //strcpy((char*)ap_config.sta.password, "hotspot.sputh");
+        //esp_wifi_sta_enterprise_disable();
 
         esp_wifi_set_config(WIFI_IF_STA, &ap_config);
         esp_wifi_connect();
