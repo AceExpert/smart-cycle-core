@@ -352,6 +352,10 @@ void gps_server(void*) {
                         send(sock, authcmd, 30 + tok_len, 0);
                         server_socket = sock;
                         server_connected = 1;
+                        if(to_alert) {
+                            to_alert = 0;
+                            send_server_cmd("$alert", "");
+                        };
                         gps_server_callbacks.on_authorized(server_socket);
                         if(gps_alive == NULL) 
                             gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(60000), pdFALSE, NULL, gps_serv_alive);
