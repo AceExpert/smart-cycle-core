@@ -71,15 +71,14 @@ void uart_cmd_task(void*);
 void process_cmd(const char*);
 
 TimerHandle_t reconnect_timer = NULL;
-TimerHandle_t gps_server_auth = NULL;
 TimerHandle_t alert_timer = NULL;
 TimerHandle_t gps_alive = NULL;
 
-int phone_socket = 0;
-uint8_t phone_connected = 0;
-uint8_t phone_auth = 0;
+int server_socket = 0;
+uint8_t server_connected = 0;
+uint8_t server_connecting = 0;
 
-static char* SERV_TOKEN = "auth 1234";
+static char* SERV_TOKEN = "hMrXDM0x6G";
 
 static struct {
     void (*on_authorized)(int sock_fd);
@@ -94,25 +93,45 @@ int get_max(int* arr, size_t len) {
     return max;
 }
 
-void gps_serv_auth(TimerHandle_t timer) {
-    if(phone_connected && !phone_auth) {
-        phone_connected = 0;
-        phone_auth = 0;
-        close(phone_socket);
-    }
-};
-
 void gps_serv_alive(TimerHandle_t timer) {
-    if(phone_connected) {
-        close(phone_socket);
-        phone_connected = 0;
-        phone_auth = 0;
-        if(xTimerIsTimerActive(gps_alive) != pdFALSE) {
-            xTimerStop(gps_alive, portMAX_DELAY);
-        }
+    if(server_connected) {
+        close(server_socket);
+        server_connected = 0;
+        server_connecting = 0;
+        server_socket = 0;
+        gps_server_callbacks.on_disconnected(0);
+    }
+    if(xTimerIsTimerActive(gps_alive) != pdFALSE) {
+        xTimerStop(gps_alive, portMAX_DELAY);
     }
 };
 
+void send_server_cmd(const char* cmd, const char* param) {
+    int len = strlen(cmd), sent = 0;
+
+    char* full_cmd = malloc(strlen(cmd) + 1 + strlen(SERV_TOKEN) + 1 + strlen(param));
+    memcpy(full_cmd, cmd, strlen(cmd));
+
+    full_cmd[len++] = ' ';
+    memcpy(full_cmd + len, SERV_TOKEN, strlen(SERV_TOKEN));
+    len += strlen(SERV_TOKEN);
+
+    if(strlen(param)) {
+        full_cmd[len++] = ' ';
+
+        memcpy(full_cmd + len, param, strlen(param));
+        len += strlen(param);
+    };
+
+    if(server_connected) {
+        //while(sent < len)
+        //    sent += send(server_socket, full_cmd + sent, len - sent, 0);
+        send(server_socket, full_cmd, len, 0);
+    }
+    free(full_cmd);
+}
+
+/* GPS Server with UDP Multicast support but this doesn't work on campus network
 void gps_server(void*) {
 
     send_uart_cmd(UART_NUM_2, ".state\n", 7);
@@ -172,17 +191,17 @@ void gps_server(void*) {
         FD_ZERO(&rds);
         FD_ZERO(&wds);
         FD_SET(udp_multi, &rds);
-        if(!phone_connected) {
+        if(!server_connected) {
             FD_SET(sock, &rds);
         } else {
-            FD_SET(phone_socket, &rds);
+            FD_SET(server_socket, &rds);
             if(phone_auth && to_alert) {
-                FD_SET(phone_socket, &wds);
+                FD_SET(server_socket, &wds);
             }
         };
     
-        int socks[3] = {sock, udp_multi, phone_socket};
-        if(select(get_max(socks, phone_connected? 3 : 2) + 1, &rds, &wds, NULL, &timeout) > 0) {
+        int socks[3] = {sock, udp_multi, server_socket};
+        if(select(get_max(socks, server_connected? 3 : 2) + 1, &rds, &wds, NULL, &timeout) > 0) {
         
             if(FD_ISSET(udp_multi, &rds) != 0) {
                 printf(" s3\n");
@@ -197,37 +216,37 @@ void gps_server(void*) {
                 }
             }
 
-            if(!phone_connected) {
+            if(!server_connected) {
                 if(FD_ISSET(sock, &rds) != 0) {
-                    phone_socket = accept(sock, (struct sockaddr*)&phone_addr, &addr_len);
-                    phone_connected = 1;
+                    server_socket = accept(sock, (struct sockaddr*)&phone_addr, &addr_len);
+                    server_connected = 1;
                     phone_auth = 0;
-                    flags = fcntl(phone_socket, F_GETFL);
-                    fcntl(phone_socket, F_SETFL, flags | O_NONBLOCK);
+                    flags = fcntl(server_socket, F_GETFL);
+                    fcntl(server_socket, F_SETFL, flags | O_NONBLOCK);
                     if(gps_server_auth == NULL)
                         gps_server_auth = xTimerCreate("gps_server_auth", pdMS_TO_TICKS(30000), pdFALSE, NULL, gps_serv_auth);
                     xTimerReset(gps_server_auth, portMAX_DELAY);
                 }
             } else {
 
-                if(FD_ISSET(phone_socket, &rds) != 0) {
-                    int dlen = recv(phone_socket, data, 256, 0);
+                if(FD_ISSET(server_socket, &rds) != 0) {
+                    int dlen = recv(server_socket, data, 256, 0);
                     data[dlen] = 0;
                     printf("%d: %s\n", dlen, data);
                     if (dlen <= 0) {
-                        phone_connected = 0;
+                        server_connected = 0;
                         phone_auth = 0;
                         if(xTimerIsTimerActive(gps_server_auth) != pdFALSE)
                             xTimerStop(gps_server_auth, portMAX_DELAY);
                         if(xTimerIsTimerActive(gps_alive) != pdFALSE) {
                             xTimerStop(gps_alive, portMAX_DELAY);
                         }
-                        gps_server_callbacks.on_disconnected(phone_socket);
+                        gps_server_callbacks.on_disconnected(server_socket);
                     } else if(!phone_auth) {
                         if(!match(SERV_TOKEN, data, 9, dlen)) {
-                            phone_connected = 0;
+                            server_connected = 0;
                             phone_auth = 0;
-                            close(phone_socket);
+                            close(server_socket);
                             if(xTimerIsTimerActive(gps_server_auth) != pdFALSE)
                                 xTimerStop(gps_server_auth, portMAX_DELAY);
                             if(xTimerIsTimerActive(gps_alive) != pdFALSE) {
@@ -237,7 +256,7 @@ void gps_server(void*) {
                             phone_auth = 1;
                             if(xTimerIsTimerActive(gps_server_auth) != pdFALSE)
                                 xTimerStop(gps_server_auth, portMAX_DELAY);
-                            gps_server_callbacks.on_authorized(phone_socket);
+                            gps_server_callbacks.on_authorized(server_socket);
                         }
                     } else {
                         if(match(".heartbeat", data, 10, dlen)) {
@@ -250,17 +269,121 @@ void gps_server(void*) {
                     }
                 };
                 
-                if (FD_ISSET(phone_socket, &wds) != 0) {
+                if (FD_ISSET(server_socket, &wds) != 0) {
                     if(to_alert) {
                         to_alert = 0;
-                        send(phone_socket, "$alert\n", 7, 0);
+                        send(server_socket, "$alert\n", 7, 0);
                     }
                 }
             }
         }
     };
     vTaskDelete(NULL);
-};
+};*/
+
+//GPS Server through my VPS
+void gps_server(void*) {
+    
+    send_uart_cmd(UART_NUM_2, ".state\n", 7);
+
+    struct sockaddr_in server_addr = {
+        .sin_addr.s_addr = htonl(IPADDR_ANY),
+        .sin_port = htons(3121),
+        .sin_family = AF_INET,
+    };
+
+    inet_aton("82.25.105.122", &server_addr.sin_addr.s_addr);
+    
+    char data[257];
+    int sock = 0;
+
+    while (1)
+    {
+        struct timeval timeout = {
+            .tv_sec = 7,
+            .tv_usec = 0,
+        };
+
+        struct fd_set rds;
+        struct fd_set wds;
+        FD_ZERO(&rds);
+        FD_ZERO(&wds);
+        
+        if(!server_connected && !server_connecting) {
+            if(sock) close(sock);
+            sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+
+            int flags = fcntl(sock, F_GETFL);
+            fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+
+            int opt = 1;
+            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+            socklen_t addr_len = sizeof(server_addr);
+            int res = connect(sock, (struct sockaddr*)&server_addr, addr_len);
+            if(res < 0 && errno != EINPROGRESS) {
+                server_connected = 0;
+                server_connecting = 0;
+                continue;
+            } else if (res != 0) {
+                server_connecting = 1;
+            }
+        } else if (server_connecting) {
+            FD_SET(sock, &wds);
+        } else {
+            FD_SET(sock, &rds);
+        };
+        if(!server_connected && !server_connecting) continue;
+        if(select(sock + 1, &rds, &wds, NULL, &timeout) > 0) {
+            if(FD_ISSET(sock, &wds) != 0) {
+                if(server_connecting) {
+                    server_connecting = 0;
+
+                    int result;
+                    socklen_t res_len = sizeof(result);
+                    getsockopt(sock, SOL_SOCKET, SO_ERROR, &result, &res_len);
+
+                    if(result == 0) {
+                        
+                        int tok_len = strlen(SERV_TOKEN);
+                        char authcmd[30 + tok_len]; 
+                        memcpy(authcmd, "$auth cycle ff:bc:cd:ff:ff:aa ", 30);
+                        memcpy(authcmd + 30, SERV_TOKEN, tok_len);
+                        send(sock, authcmd, 30 + tok_len, 0);
+                        server_socket = sock;
+                        server_connected = 1;
+                        gps_server_callbacks.on_authorized(server_socket);
+                        if(gps_alive == NULL) 
+                            gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(60000), pdFALSE, NULL, gps_serv_alive);
+                        xTimerReset(gps_alive, portMAX_DELAY);
+                    } else {
+                        server_connected = 0;
+                    }
+                }
+            }
+
+            if(FD_ISSET(sock, &rds) != 0) {
+                int dlen = recv(server_socket, data, 256, 0);
+                data[dlen] = 0;
+
+                if(dlen <= 0) {
+                    close(sock);
+                    server_connected = 0;
+                    server_connecting = 0;
+                    sock = 0;
+                    server_socket = 0;
+                    gps_server_callbacks.on_disconnected(server_socket);
+                } else {
+
+                    if(gps_alive == NULL) 
+                        gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(60000), pdFALSE, NULL, gps_serv_alive);
+                    xTimerReset(gps_alive, portMAX_DELAY);
+                };
+            }
+        }
+    }
+    
+}
 
 void start_bluetooth() {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -480,18 +603,17 @@ void app_main(void)
 }
 
 void send_gps(const char* tag, struct gps_info gpsinfo, int tlen) {
-    if(phone_connected && phone_auth) {
-        send(phone_socket, tag, tlen, 0);
-        if(gps_alive == NULL) 
-            gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(15000), pdFALSE, NULL, gps_serv_alive);
-        if(xTimerIsTimerActive(gps_alive) == pdFALSE)
-            xTimerReset(gps_alive, portMAX_DELAY);
+    if(server_connected) {
+        char param[tlen+1];
+        memcpy(param, tag, tlen);
+        param[tlen] = 0;
+        send_server_cmd("$gps", param);
     };
 }
 
 void send_alert(TimerHandle_t timer) {
-    if(phone_connected && phone_auth) {
-        send(phone_socket, "$alert\n", 7, 0);
+    if(server_connected) {
+        send_server_cmd("$alert", "");
         xTimerStop(timer, portMAX_DELAY);
     };
 }
@@ -508,8 +630,8 @@ void process_cmd(const char* cmd) {
     if (strcmp(cmd, "ack") == 0) {
         acked();
     } else if(strcmp(cmd, "alert") == 0) {
-        if(phone_connected && phone_auth) {
-            send(phone_socket, "$alert\n", 7, 0);
+        if(server_connected) {
+            send_server_cmd("$alert", "");
         } else {
             to_alert = 1;
         };
@@ -688,10 +810,10 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
         for(int i = 0; i < num; i++) {
             //printf("%s: RSSI: %d\n", ap_records[i].ssid, ap_records[i].rssi);            
             for(int j = 0; j < 7; j++) {
-                /*if(strcmp((const char*)(ap_records[i].ssid), "GUEST_SECURED") == 0 && ap_records[i].rssi > -100) {
+                if(strcmp((const char*)(ap_records[i].ssid), "GUEST_SECURED") == 0 && ap_records[i].rssi > -100) {
                     strcpy(best_ssid, "GUEST_SECURED");
                     break;
-                }*/
+                }
                 if(strcmp((const char*)(ap_records[i].ssid), WIFI_SSID[j]) == 0) {
                     if(ap_records[i].rssi > rssi_best) {
                         strcpy(best_ssid, WIFI_SSID[j]);
