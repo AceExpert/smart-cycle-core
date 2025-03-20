@@ -299,6 +299,18 @@ void gps_server(void*) {
 
     while (1)
     {
+        if(unlocked) {
+            if(sock) {
+                close(sock);
+                server_socket = 0;
+                sock = 0;
+            }
+            server_connected = 0;
+            server_connecting = 0;
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
         struct timeval timeout = {
             .tv_sec = 7,
             .tv_usec = 0,
@@ -859,6 +871,7 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
     };
 
     case WIFI_EVENT_STA_DISCONNECTED: {
+        
         wifi_event_sta_disconnected_t* disconn = event_data;
         printf("Wifi disconnected Reason: %d\n", disconn->reason);
 
