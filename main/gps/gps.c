@@ -85,10 +85,10 @@ void read_gps(TimerHandle_t timer) {
     };
 
     free(tag);
-    tag = "$GPGGA,1783.0,3232.32656,N,9583.43344,E,0,00,99.99,,,,,,*48\n";
-    t_len = 60;
+    tag = "$GPGGA,1783.0,2219.30970,N,08717.92447,E,0,00,99.99,,,,,,*48\n";
+    t_len = 61;
     
-    sscanf(tag, "$GPGGA,%lf,%lf,%c,%lf,%c,", &(gp_info.utc), &(gp_info.lat), &(gp_info.lat_dir), &(gp_info.logt), &(gp_info.logt_dir));
+    sscanf(tag, "$GPGGA,%lf,%lf,%c,%lf,%c,", &gp_info.utc, &gp_info.lat, &gp_info.lat_dir, &gp_info.logt, &gp_info.logt_dir);
     
     //printf("%s | utc = %lf , lat = %lf %c , longt = %lf %c\n", tag, gp_info.utc, gp_info.lat, gp_info.lat_dir, gp_info.logt, gp_info.logt_dir);
     

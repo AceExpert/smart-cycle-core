@@ -109,7 +109,7 @@ void gps_serv_alive(TimerHandle_t timer) {
 void send_server_cmd(const char* cmd, const char* param) {
     int len = strlen(cmd), sent = 0;
 
-    char* full_cmd = malloc(strlen(cmd) + 1 + strlen(SERV_TOKEN) + 1 + strlen(param));
+    char* full_cmd = malloc(strlen(cmd) + 1 + strlen(SERV_TOKEN) + 1 + strlen(param) + 1);
     memcpy(full_cmd, cmd, strlen(cmd));
 
     full_cmd[len++] = ' ';
@@ -122,6 +122,9 @@ void send_server_cmd(const char* cmd, const char* param) {
         memcpy(full_cmd + len, param, strlen(param));
         len += strlen(param);
     };
+    if(full_cmd[len - 1] != '\n') {
+        full_cmd[len++] = '\n';
+    }
 
     if(server_connected) {
         //while(sent < len)
@@ -358,10 +361,11 @@ void gps_server(void*) {
                     if(result == 0) {
                         
                         int tok_len = strlen(SERV_TOKEN);
-                        char authcmd[30 + tok_len]; 
+                        char authcmd[30 + tok_len + 1]; 
                         memcpy(authcmd, "$auth cycle ff:bc:cd:ff:ff:aa ", 30);
                         memcpy(authcmd + 30, SERV_TOKEN, tok_len);
-                        send(sock, authcmd, 30 + tok_len, 0);
+                        authcmd[30 + tok_len] = '\n';
+                        send(sock, authcmd, 30 + tok_len + 1, 0);
                         server_socket = sock;
                         server_connected = 1;
                         if(to_alert) {
