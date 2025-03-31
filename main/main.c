@@ -342,6 +342,7 @@ void gps_server(void*) {
                 continue;
             } else if (res != 0) {
                 server_connecting = 1;
+                FD_SET(sock, &wds);
             }
         } else if (server_connecting) {
             FD_SET(sock, &wds);
