@@ -295,7 +295,7 @@ void gps_server(void*) {
         .sin_family = AF_INET,
     };
 
-    inet_aton("82.25.105.122", &server_addr.sin_addr.s_addr);
+    inet_aton("209.74.79.245", &server_addr.sin_addr.s_addr);
     
     char data[257];
     int sock = 0;
