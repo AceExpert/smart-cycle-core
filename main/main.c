@@ -181,7 +181,7 @@ void setup_adc() {
 
     for (int i = 0; i < 2; i++) {
         uint8_t adc_unit, adc_channel;
-        adc_continuous_io_to_channel(i? 33 : 32, &adc_unit, &adc_channel); 
+        adc_continuous_io_to_channel(i? 33 : 32, (adc_unit_t*)&adc_unit, (adc_channel_t*)&adc_channel); 
         adc_pattern[i].atten = ADC_ATTEN_DB_12;
         adc_pattern[i].channel = adc_channel;
         adc_pattern[i].unit = adc_unit;
@@ -562,7 +562,7 @@ void media_ctrl_exec(void*){
 
 bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data)
 {
-    adc_digi_output_data_t* final_data = data->conv_frame_buffer;
+    adc_digi_output_data_t* final_data = (adc_digi_output_data_t*)(data->conv_frame_buffer);
 
     int sens = 0;
 
