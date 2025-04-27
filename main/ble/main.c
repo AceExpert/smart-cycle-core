@@ -15,6 +15,7 @@
 
 #include "main.h"
 #include "../utils/main.h"
+#include "../user_data/main.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -27,7 +28,8 @@ int cycle_state = LOCKED;
 struct {
     void (*locked)();
     void (*unlocked)();
-} cycle_callbacks = {NULL, NULL};
+    void (*force_thresh_change)();
+} cycle_callbacks = {NULL, NULL, NULL};
 
 struct gatts_prof* get_gatts_prof() {
     return gatts_profile;
@@ -43,6 +45,9 @@ void set_cycle_callback(int state, void (*callback)()) {
     case UNLOCKED:
         cycle_callbacks.unlocked = callback;
         break;
+
+    case THRESH:
+        cycle_callbacks.force_thresh_change = callback;
         
     default:
         break;
@@ -148,7 +153,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                 } else esp_ble_gatts_close(gatts_profile[0].gatts_if, gatts_profile[0].conn_id);
                 xTimerStop(auth_timer, portMAX_DELAY);
             } else {
-                if(size == 2 && match(TOKEN, res[0].text, 20, res[0].len)) {
+                if(size >= 2 && match(TOKEN, res[0].text, 20, res[0].len)) {
                     if(match("unlock", res[1].text, 6, res[1].len)) {
                         cycle_state = UNLOCKED;
                         if(cycle_callbacks.unlocked != NULL) {
@@ -159,6 +164,25 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         cycle_state = LOCKED;
                         if(cycle_callbacks.locked != NULL) {
                             cycle_callbacks.locked();
+                        }
+                    } 
+                    else if (match("speaker_addr", res[1].text, 12, res[1].len)) {
+                        update_field("speaker_addr", (uint8_t*)res[2].text, 6);
+                        save_user_info();
+                    } else if (match("user_name", res[1].text, 9, res[1].len)) {
+                        update_field("user", (uint8_t*)res[2].text, res[2].len);
+                        save_user_info();
+                    } else if (match("phone_token", res[1].text, 11, res[1].len)) {
+                        update_field("phone_token", (uint8_t*)res[2].text, res[2].len);
+                        save_user_info();
+                    } else if (match("gps_token", res[1].text, 9, res[1].len)) {
+                        update_field("gps_token", (uint8_t*)res[2].text, res[2].len);
+                        save_user_info();
+                    } else if (match("force_sense", res[1].text, 9, res[1].len)) {
+                        update_field("force_sense", (uint8_t*)res[2].text, res[2].len);
+                        save_user_info();
+                        if(cycle_callbacks.force_thresh_change != NULL) {
+                            cycle_callbacks.force_thresh_change();
                         }
                     }
                     else if (match("left_turn", res[1].text, 9, res[1].len)) {

@@ -77,6 +77,7 @@ static esp_attr_value_t char_value = {.attr_max_len = 200, .attr_len = 0, .attr_
 enum CycleState {
     LOCKED = 0,
     UNLOCKED = 1,
+    THRESH = 2,
 };
 
 void esp_ble_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);

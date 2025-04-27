@@ -24,9 +24,12 @@
 #include "ble/main.h"
 #include "utils/main.h"
 #include "audio/source.h"
+#include "user_data/main.h"
 
 #define MPU_VALUE(b2, b1) ((int16_t)(((b2) >> 7) ? ~((b2) << 8 | (b1)) : ((b2) << 8 | (b1))))
 #define ABS(a) (((a) > 0) ? (a) : (-(a)))
+
+static int motor_gpio[2] = {15, 16};
 
 i2s_chan_handle_t i2s_rx;
 
@@ -35,6 +38,8 @@ adc_continuous_handle_t adc_handle;
 uint8_t mpu_addr[3] = {0x6B, 0x1C, 0x3B};
 
 TaskHandle_t* motion_task;
+
+TimerHandle_t lock_motor_timer = NULL;
 
 time_t alert_time = 0;
 time_t turb_time = 0;
@@ -52,6 +57,8 @@ uint8_t horn = 0;
 uint8_t rev = 0;
 
 int taps[2] = {0, 0};
+
+int force_thresh = 400;
 
 enum MEDIA_CONTROLS {
     PREV = 0,
@@ -108,6 +115,8 @@ void on_speaker_connect();
 void monitor_motion(void*);
 void media_ctrl_exec(void*);
 bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data);
+void lock_motor_control(TimerHandle_t timer);
+void set_new_force_thresh();
 
 void start_bluetooth() {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -143,6 +152,7 @@ void start_bluetooth() {
 void setup_ble() {
     set_cycle_callback(LOCKED, cycle_locked);
     set_cycle_callback(UNLOCKED, cycle_unlocked);
+    set_cycle_callback(THRESH, set_new_force_thresh);
 
     esp_ble_gap_register_callback(esp_ble_gap_cb);
     esp_ble_gatts_register_callback(esp_gatts_cb);
@@ -228,6 +238,11 @@ void app_main(void)
     gpio_set_level(GPIO_NUM_26, 0);
     gpio_set_level(GPIO_NUM_25, 0);
 
+    gpio_set_direction(*motor_gpio, GPIO_MODE_OUTPUT);
+    gpio_set_direction(motor_gpio[1], GPIO_MODE_OUTPUT);
+
+    lock_motor_timer = xTimerCreate("motor_lock_timer", pdMS_TO_TICKS(1), pdFALSE, NULL, lock_motor_control);
+
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
@@ -295,6 +310,9 @@ void app_main(void)
 
     setup_adc();
     mount_sdcard();
+    setup_user_info();
+    get_all_field();
+    set_new_force_thresh();
     start_bluetooth();
     setup_ble();
 
@@ -308,8 +326,13 @@ void on_speaker_connect() {
     esp_ble_gap_start_advertising(&adv_params);
 }
 
+void set_new_force_thresh() {
+    force_thresh = get_force_thresh();
+}
+
 void cycle_unlocked() {
     unlocked = 1;
+    xTimerReset(lock_motor_timer, portMAX_DELAY);
     send_uart_cmd(UART_NUM_2, ".unlocked\n", 10);
     add_playlist("/sdcard/startup.pcm", 0);
     //add_playlist("/sdcard/music.pcm", 1);
@@ -320,9 +343,20 @@ void cycle_unlocked() {
 void cycle_locked() {
     unlocked = 0;
     cruise = 0;
+    xTimerReset(lock_motor_timer, portMAX_DELAY);
     i2s_handle_set(NULL);
     send_uart_cmd(UART_NUM_2, ".locked\n", 8);
     adc_continuous_stop(adc_handle);
+}
+
+void lock_motor_control(TimerHandle_t timer) {    
+    gpio_set_level(*motor_gpio, unlocked? 1 : 0);
+    gpio_set_level(motor_gpio[1], unlocked? 0: 1);
+
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    gpio_set_level(*motor_gpio, 0);
+    gpio_set_level(motor_gpio[1], 0);
 }
 
 void process_cmd(const char* cmd) {
@@ -550,10 +584,10 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
             continue;
         };
 
-        if(final_val > 400 && !force_start[i]) { //final_val < 3700 (3801)
+        if(final_val > force_thresh && !force_start[i]) { //final_val < 3700 (3801)
             tap_end[i] = 0;
             force_start[i] = clock();
-        } else if (clock() - force_start[i] >= 400 && final_val > 400 && !vol_ctrl[i]) {
+        } else if (clock() - force_start[i] >= 400 && final_val > force_thresh && !vol_ctrl[i]) {
             if(force_start[j] && (force_start[i])) { // && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])
                 if(taps[i] == 1 || taps[j] == 1) {
                     rev = 1;
