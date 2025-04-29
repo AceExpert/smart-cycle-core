@@ -4,8 +4,8 @@
 
 #include "main.h"
 
-const char* file_format = "user:\ngps_token:\nphone_token:\nspeaker_addr:\nphone_addr:\nforce_sense:400\n";
-static int file_len = 72;
+const char* file_format = "user:\ngps_token:\nphone_token:\nspeaker_addr:\nphone_addr:\nforce_sense:400\nalarm:1\nalarm_sense:1\ng:10\nforce:1\n";
+static int file_len = 107;
 
 struct user_cache* cached = NULL;
 size_t cached_len = 0;
@@ -249,6 +249,29 @@ int get_force_thresh() {
     int thresh = 0;
     sscanf(value, "%d", &thresh);
     return thresh;
+}
+
+float get_g() {
+    char* value = get_cache_field("g");
+    float g = 0;
+    sscanf(value, "%f", &g);
+    return g;
+}
+
+
+uint8_t get_bool(const char* field) {
+    char* value = get_cache_field(field);
+    uint8_t on = 0;
+    sscanf(value, "%d", &on);
+    return on;
+}
+
+uint8_t get_alarm() {
+    return get_bool("alarm");
+}
+
+uint8_t get_force_active() {
+    return get_bool("force");
 }
 
 char* copy_content(FILE* file, int len) {

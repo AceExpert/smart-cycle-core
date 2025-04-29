@@ -184,6 +184,9 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         if(cycle_callbacks.force_thresh_change != NULL) {
                             cycle_callbacks.force_thresh_change();
                         }
+                    } else if (match("set_alarm", res[1].text, 9, res[1].len)) {
+                        update_field("alarm", (uint8_t*)res[2].text, 1);
+                        save_user_info();
                     }
                     else if (match("left_turn", res[1].text, 9, res[1].len)) {
                         direction_indic(0, 1, 0);

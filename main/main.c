@@ -39,8 +39,6 @@ uint8_t mpu_addr[3] = {0x6B, 0x1C, 0x3B};
 
 TaskHandle_t* motion_task;
 
-TimerHandle_t lock_motor_timer = NULL;
-
 time_t alert_time = 0;
 time_t turb_time = 0;
 time_t turb_stop = 0;
@@ -115,7 +113,7 @@ void on_speaker_connect();
 void monitor_motion(void*);
 void media_ctrl_exec(void*);
 bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data);
-void lock_motor_control(TimerHandle_t timer);
+void lock_motor_control(void*);
 void set_new_force_thresh();
 
 void start_bluetooth() {
@@ -241,8 +239,6 @@ void app_main(void)
     gpio_set_direction(*motor_gpio, GPIO_MODE_OUTPUT);
     gpio_set_direction(motor_gpio[1], GPIO_MODE_OUTPUT);
 
-    lock_motor_timer = xTimerCreate("motor_lock_timer", pdMS_TO_TICKS(1), pdFALSE, NULL, lock_motor_control);
-
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
@@ -332,7 +328,7 @@ void set_new_force_thresh() {
 
 void cycle_unlocked() {
     unlocked = 1;
-    xTimerReset(lock_motor_timer, portMAX_DELAY);
+    xTaskCreate(lock_motor_control, "lock_motor_timer", 2048, NULL, 4, NULL);
     send_uart_cmd(UART_NUM_2, ".unlocked\n", 10);
     add_playlist("/sdcard/startup.pcm", 0);
     //add_playlist("/sdcard/music.pcm", 1);
@@ -343,13 +339,13 @@ void cycle_unlocked() {
 void cycle_locked() {
     unlocked = 0;
     cruise = 0;
-    xTimerReset(lock_motor_timer, portMAX_DELAY);
+    xTaskCreate(lock_motor_control, "lock_motor_timer", 2048, NULL, 4, NULL);
     i2s_handle_set(NULL);
     send_uart_cmd(UART_NUM_2, ".locked\n", 8);
     adc_continuous_stop(adc_handle);
 }
 
-void lock_motor_control(TimerHandle_t timer) {    
+void lock_motor_control(void*) {    
     gpio_set_level(*motor_gpio, unlocked? 1 : 0);
     gpio_set_level(motor_gpio[1], unlocked? 0: 1);
 
@@ -357,6 +353,8 @@ void lock_motor_control(TimerHandle_t timer) {
 
     gpio_set_level(*motor_gpio, 0);
     gpio_set_level(motor_gpio[1], 0);
+
+    vTaskDelete(NULL);
 }
 
 void process_cmd(const char* cmd) {
