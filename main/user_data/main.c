@@ -11,13 +11,23 @@ struct user_cache* cached = NULL;
 size_t cached_len = 0;
 
 void setup_user_info() {
-    FILE* user_info = fopen("/sdcard/user_info.dat", "ab+");
+    FILE* user_info = fopen("/sdcard/userinfo", "r");
+    if(user_info == NULL) {
+        user_info = fopen("/sdcard/userinfo", "w");
+    } else {
+        fseek(user_info, 0, SEEK_END);
+        if(ftell(user_info) != 0) {
+            fclose(user_info);
+            return;
+        } else {
+            fclose(user_info);
+            user_info = fopen("/sdcard/userinfo", "w");
+        };
+    }
     int written = 0;
 
-    fseek(user_info, 0, SEEK_END);
-
     if(ftell(user_info) == 0) {
-        
+
         while(written < file_len) {
             written += fwrite(file_format + written, 1, file_len - written, user_info);
         };
@@ -27,7 +37,7 @@ void setup_user_info() {
 }
 
 void set_field(const char* field, const void* data, int data_len) {
-    FILE* user_info = fopen("/sdcard/user_info.dat", "rb+");
+    FILE* user_info = fopen("/sdcard/userinfo", "r+");
     fseek(user_info, 0, SEEK_END);
     long file_end = ftell(user_info);
 
@@ -65,7 +75,7 @@ void set_field(const char* field, const void* data, int data_len) {
                 fseek(user_info, current_seek, SEEK_SET);
                 char* copied = copy_content(user_info, copied_len);
                 fclose(user_info);
-                user_info = fopen("/sdcard/user_info.dat", "wb");
+                user_info = fopen("/sdcard/userinfo", "w");
                 fwrite(copied_before, 1, start_write, user_info);
                 fwrite(data, 1, data_len, user_info);
                 fwrite("\n", 1, 1, user_info);
@@ -93,7 +103,7 @@ void set_field(const char* field, const void* data, int data_len) {
 }
 
 int get_field(const char* field, uint8_t** data) {
-    FILE* user_info = fopen("/sdcard/user_info.dat", "rb");
+    FILE* user_info = fopen("/sdcard/userinfo", "r");
 
     char rfield[20];
     int field_len = 0;
@@ -146,7 +156,7 @@ int get_field(const char* field, uint8_t** data) {
 }
 
 struct user_cache* get_all_field() {
-    FILE* user_info = fopen("/sdcard/user_info.dat", "rb");
+    FILE* user_info = fopen("/sdcard/userinfo", "r");
 
     if(cached != NULL) free(cached);
 
@@ -209,8 +219,8 @@ uint8_t update_field(const char* field, uint8_t* value, size_t value_len) {
 }
 
 void save_user_info() {
-    FILE* user_info = fopen("/sdcard/user_info.dat", "rb");
-    FILE* user_info_back = fopen("/sdcard/user_info_back.dat", "wb");
+    FILE* user_info = fopen("/sdcard/userinfo", "r");
+    FILE* user_info_back = fopen("/sdcard/userback", "w");
 
     char c[1];
     while (fread(c, 1, 1, user_info))
@@ -220,7 +230,7 @@ void save_user_info() {
     fclose(user_info_back);
     fclose(user_info);
 
-    user_info = fopen("/sdcard/user_info.dat", "wb");
+    user_info = fopen("/sdcard/userinfo", "w");
     for(int i = 0; i < cached_len; i++) {
         fwrite(cached[i].name, 1, strlen(cached[i].name), user_info);
         fwrite(":", 1, 1, user_info);
@@ -261,9 +271,9 @@ float get_g() {
 
 uint8_t get_bool(const char* field) {
     char* value = get_cache_field(field);
-    uint8_t on = 0;
+    int on = 0;
     sscanf(value, "%d", &on);
-    return on;
+    return (uint8_t)on;
 }
 
 uint8_t get_alarm() {

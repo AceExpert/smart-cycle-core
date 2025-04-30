@@ -33,3 +33,4 @@ void set_on_speaker_connect(void (*)());
 void set_custom_play(const char* path);
 void in_call();
 void end_call();
+void connect_speaker();

@@ -227,6 +227,12 @@ void mount_sdcard() {
     sdmmc_card_print_info(stdout, card);
 }
 
+void user_setup_timer(TimerHandle_t timer) {
+    setup_user_info();
+    get_all_field();
+    set_new_force_thresh();
+}
+
 void app_main(void)
 {
     printf("Cytroid starting...\n");
@@ -306,20 +312,20 @@ void app_main(void)
 
     setup_adc();
     mount_sdcard();
-    setup_user_info();
-    get_all_field();
-    set_new_force_thresh();
     start_bluetooth();
     setup_ble();
 
     //adc_continuous_start(adc_handle);
     
     xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
+    TimerHandle_t user_setup = xTimerCreate("user_setup_timer", pdMS_TO_TICKS(1000), pdFALSE, NULL, user_setup_timer);
+    xTimerReset(user_setup, portMAX_DELAY); 
     //xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
+    
 }
 
 void on_speaker_connect() {
-    esp_ble_gap_start_advertising(&adv_params);
+    //esp_ble_gap_start_advertising(&adv_params);
 }
 
 void set_new_force_thresh() {

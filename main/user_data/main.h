@@ -14,6 +14,7 @@ void save_user_info();
 struct user_cache* get_user_cache();
 struct user_cache* get_all_field();
 int get_force_thresh();
+char* get_cache_field(const char* name);
 uint8_t get_alarm();
 uint8_t get_force_active();
 float get_g();

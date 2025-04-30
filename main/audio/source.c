@@ -11,6 +11,7 @@
 #include "esp_hf_ag_api.h"
 
 #include "source.h"
+#include "../user_data/main.h"
 
 FILE* play_file = NULL;
 FILE* cus_play_file = NULL;
@@ -18,7 +19,7 @@ struct local_playlist* playlist = NULL;
 
 i2s_chan_handle_t* i2s_chan = NULL;
 
-static esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
+esp_bd_addr_t speaker_addr = {0x41, 0x42, 0x4a, 0x84, 0x85, 0xc2};
 
 uint8_t hfp_on = 0;
 uint8_t hfp_off = 0;
@@ -44,6 +45,11 @@ void set_on_speaker_connect(void (*callb)()) {
 
 void set_custom_play(const char* path) {
     custom_play_path = path;
+}
+
+void connect_speaker() {
+    memcpy(speaker_addr, get_cache_field("speaker_addr"), 6);
+    esp_a2d_source_connect(speaker_addr);
 }
 
 void in_call() {
@@ -156,6 +162,36 @@ void cruise_mode() {
 void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 {
     switch (event) {
+
+    case ESP_BT_GAP_DISC_STATE_CHANGED_EVT: {
+        if(param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
+            printf("Discovery stopped\n");
+        }
+        break;
+    }
+
+    case ESP_BT_GAP_DISC_RES_EVT: {
+        for(int j = 0; j < 6; j++) {
+            printf("%x:", param->disc_res.bda[j]);
+        }
+        for(int i = 0; i < param->disc_res.num_prop; i++) {
+            if(param->disc_res.prop[i].type == ESP_BT_GAP_DEV_PROP_COD) {
+                uint32_t cod = *(uint32_t*)param->disc_res.prop[i].val;
+                if(esp_bt_gap_get_cod_major_dev(cod) == ESP_BT_COD_MAJOR_DEV_AV) {
+                    printf("Found Speaker @ ");
+                    for(int j = 0; j < 6; j++) {
+                        printf("%x:", param->disc_res.bda[j]);
+                    }
+                    printf("\n");
+                }
+            } else if (param->disc_res.prop[i].type == ESP_BT_GAP_DEV_PROP_RSSI) {
+                int8_t* rssi = (int8_t*)param->disc_res.prop[i].val;
+                printf("RSSI: %d\n\n", *rssi);
+            }
+        }
+        break;
+    }
+    
     /* when authentication completed, this event comes */
     case ESP_BT_GAP_AUTH_CMPL_EVT: {
         if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS) {
@@ -187,14 +223,12 @@ void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
     }
 }
 
-
-
 void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     switch (event)
     {
     case ESP_A2D_PROF_STATE_EVT: {
         if (param->a2d_prof_stat.init_state == ESP_A2D_INIT_SUCCESS) {
-            esp_a2d_source_connect(speaker_addr);
+            //esp_a2d_source_connect(speaker_addr);
             //esp_hf_ag_slc_connect(speaker_addr);
         }
         break;

@@ -86,7 +86,7 @@ void esp_ble_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param)
     switch (event)
     {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
-        //esp_ble_gap_start_advertising(&adv_params);
+        esp_ble_gap_start_advertising(&adv_params);
         break;
     default:
         break;
@@ -187,6 +187,9 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                     } else if (match("set_alarm", res[1].text, 9, res[1].len)) {
                         update_field("alarm", (uint8_t*)res[2].text, 1);
                         save_user_info();
+                    } else if (match("speaker_setup", res[1].text, 13, res[1].len)) {
+                        printf("Starting speaker setup\n");
+                        esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 0x10, 10);
                     }
                     else if (match("left_turn", res[1].text, 9, res[1].len)) {
                         direction_indic(0, 1, 0);
