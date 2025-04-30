@@ -174,6 +174,7 @@ void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
         for(int j = 0; j < 6; j++) {
             printf("%x:", param->disc_res.bda[j]);
         }
+        printf(" ");
         for(int i = 0; i < param->disc_res.num_prop; i++) {
             if(param->disc_res.prop[i].type == ESP_BT_GAP_DEV_PROP_COD) {
                 uint32_t cod = *(uint32_t*)param->disc_res.prop[i].val;
