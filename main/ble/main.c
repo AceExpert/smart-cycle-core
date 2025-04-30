@@ -4,6 +4,7 @@
 
 #include "esp_bt.h"
 #include "esp_bt_main.h"
+#include "esp_a2dp_api.h"
 #include "esp_bt_device.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gap_bt_api.h"
@@ -42,6 +43,10 @@ void set_motor_channels(dac_oneshot_handle_t* h1, dac_oneshot_handle_t* h2) {
 
 struct gatts_prof* get_gatts_prof() {
     return gatts_profile;
+}
+
+void speaker_disc_cmd(const char* d, int len) {
+    esp_ble_gatts_send_indicate(gatts_profile->gatts_if, gatts_profile->conn_id, gatts_profile->char_handle, len, (uint8_t*)d, false);
 }
  
 void set_cycle_callback(int state, void (*callback)()) {
@@ -178,6 +183,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                     else if (match("speaker_addr", res[1].text, 12, res[1].len)) {
                         update_field("speaker_addr", (uint8_t*)res[2].text, 6);
                         save_user_info();
+                        esp_a2d_source_connect((uint8_t*)res[2].text);
                     } else if (match("user_name", res[1].text, 9, res[1].len)) {
                         update_field("user", (uint8_t*)res[2].text, res[2].len);
                         save_user_info();
@@ -197,7 +203,6 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         update_field("alarm", (uint8_t*)res[2].text, 1);
                         save_user_info();
                     } else if (match("speaker_setup", res[1].text, 13, res[1].len)) {
-                        printf("Starting speaker setup\n");
                         esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 0x10, 10);
                     }
                     else if (match("left_turn", res[1].text, 9, res[1].len)) {

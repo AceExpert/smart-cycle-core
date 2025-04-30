@@ -87,3 +87,4 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
 void set_cycle_callback(int state, void (*callback)());
 struct gatts_prof* get_gatts_prof();
 void set_motor_channels(dac_oneshot_handle_t* h1, dac_oneshot_handle_t* h2);
+void speaker_disc_cmd(const char* d, int len);
