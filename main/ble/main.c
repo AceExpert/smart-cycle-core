@@ -12,6 +12,7 @@
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "driver/dac_oneshot.h"
 
 #include "main.h"
 #include "../utils/main.h"
@@ -25,11 +26,19 @@ TimerHandle_t auth_timer = NULL;
 
 int cycle_state = LOCKED;
 
+dac_oneshot_handle_t motor1;
+dac_oneshot_handle_t motor2;
+
 struct {
     void (*locked)();
     void (*unlocked)();
     void (*force_thresh_change)();
 } cycle_callbacks = {NULL, NULL, NULL};
+
+void set_motor_channels(dac_oneshot_handle_t* h1, dac_oneshot_handle_t* h2) {
+    motor1 = *h1;
+    motor2 = *h2;
+}
 
 struct gatts_prof* get_gatts_prof() {
     return gatts_profile;
@@ -58,8 +67,8 @@ void direction_indic(int8_t dynam, uint8_t m1, uint8_t m2) {
     switch (dynam)
     {
     case 0: {
-        gpio_set_level(26, m1);
-        gpio_set_level(25, m2);
+        dac_oneshot_output_voltage(motor1, m1? 255 : 0);
+        dac_oneshot_output_voltage(motor2, m2? 255 : 0);
         break;
     }
 
@@ -68,8 +77,8 @@ void direction_indic(int8_t dynam, uint8_t m1, uint8_t m2) {
     }
 
     case -1: {
-        gpio_set_level(26, 0);
-        gpio_set_level(25, 0);
+        dac_oneshot_output_voltage(motor1, 0);
+        dac_oneshot_output_voltage(motor2, 0);
         break;
     }
 

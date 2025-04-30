@@ -13,6 +13,7 @@
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "driver/dac_oneshot.h"
 //#include "driver/i2s_std.h"
 #include "driver/i2s.h"
 #include "esp_adc/adc_continuous.h"
@@ -29,11 +30,11 @@
 #define MPU_VALUE(b2, b1) ((int16_t)(((b2) >> 7) ? ~((b2) << 8 | (b1)) : ((b2) << 8 | (b1))))
 #define ABS(a) (((a) > 0) ? (a) : (-(a)))
 
-static int motor_gpio[2] = {15, 16};
-
 i2s_chan_handle_t i2s_rx;
 
 adc_continuous_handle_t adc_handle;
+dac_oneshot_handle_t h1;
+dac_oneshot_handle_t h2;
 
 uint8_t mpu_addr[3] = {0x6B, 0x1C, 0x3B};
 
@@ -237,13 +238,19 @@ void app_main(void)
 {
     printf("Cytroid starting...\n");
 
-    gpio_set_direction(GPIO_NUM_26, GPIO_MODE_OUTPUT);
-    gpio_set_direction(GPIO_NUM_25, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_NUM_26, 0);
-    gpio_set_level(GPIO_NUM_25, 0);
+    gpio_reset_pin(GPIO_NUM_27);
+    gpio_reset_pin(GPIO_NUM_14);
+    gpio_reset_pin(GPIO_NUM_12);
+    
+    gpio_set_direction(GPIO_NUM_27, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_14, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_12, GPIO_MODE_OUTPUT);
 
-    gpio_set_direction(*motor_gpio, GPIO_MODE_OUTPUT);
-    gpio_set_direction(motor_gpio[1], GPIO_MODE_OUTPUT);
+    dac_oneshot_config_t h1_config = {DAC_CHAN_0};
+    dac_oneshot_config_t h2_config = {DAC_CHAN_1};
+
+    dac_oneshot_new_channel(&h1_config, &h1);
+    dac_oneshot_new_channel(&h2_config, &h2);
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -310,6 +317,8 @@ void app_main(void)
     uart_param_config(UART_NUM_2, &main_uart);
     uart_set_pin(UART_NUM_2, 17, 16, -1, -1);
 
+    set_motor_channels(&h1, &h2);
+
     setup_adc();
     mount_sdcard();
     start_bluetooth();
@@ -318,7 +327,7 @@ void app_main(void)
     //adc_continuous_start(adc_handle);
     
     xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
-    TimerHandle_t user_setup = xTimerCreate("user_setup_timer", pdMS_TO_TICKS(1000), pdFALSE, NULL, user_setup_timer);
+    TimerHandle_t user_setup = xTimerCreate("user_setup_timer", pdMS_TO_TICKS(500), pdFALSE, NULL, user_setup_timer);
     xTimerReset(user_setup, portMAX_DELAY); 
     //xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
     
@@ -352,13 +361,13 @@ void cycle_locked() {
 }
 
 void lock_motor_control(void*) {    
-    gpio_set_level(*motor_gpio, unlocked? 1 : 0);
-    gpio_set_level(motor_gpio[1], unlocked? 0: 1);
+    gpio_set_level(GPIO_NUM_27, unlocked? 1 : 0);
+    gpio_set_level(GPIO_NUM_14, unlocked? 0: 1);
 
     vTaskDelay(pdMS_TO_TICKS(5000));
 
-    gpio_set_level(*motor_gpio, 0);
-    gpio_set_level(motor_gpio[1], 0);
+    gpio_set_level(GPIO_NUM_27, 0);
+    gpio_set_level(GPIO_NUM_14, 0);
 
     vTaskDelete(NULL);
 }

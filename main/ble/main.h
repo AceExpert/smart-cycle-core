@@ -6,6 +6,8 @@
 #include "esp_gatt_common_api.h"
 #include "esp_gatts_api.h"
 
+#include "driver/dac_oneshot.h"
+
 static char* TOKEN = "49n5pEsOUDF25rBhUFmN";
 
 static uint8_t adv_service_uuid128[16] = {
@@ -84,3 +86,4 @@ void esp_ble_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param)
 void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_cb_param_t* param);
 void set_cycle_callback(int state, void (*callback)());
 struct gatts_prof* get_gatts_prof();
+void set_motor_channels(dac_oneshot_handle_t* h1, dac_oneshot_handle_t* h2);
