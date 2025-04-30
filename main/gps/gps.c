@@ -48,7 +48,6 @@ void read_gps(TimerHandle_t timer) {
     uart_flush(UART_NUM_1);
     int t_len = 0;
     char* tag = malloc(1);
-    /*
     while (1) {
         int len = uart_read_bytes(UART_NUM_1, &data, 1, 20 / portTICK_PERIOD_MS);
         if(len) {
@@ -78,23 +77,23 @@ void read_gps(TimerHandle_t timer) {
             tag = malloc(1);
             continue;
         }
-    }*/
+    }
 
     struct gps_info gp_info = {
         .utc = 0,
     };
 
-    free(tag);
+    /*free(tag);
     tag = "$GPGGA,1783.0,2219.30970,N,08717.92447,E,0,00,99.99,,,,,,*48\n";
-    t_len = 61;
-    
+    t_len = 61;*/
+
     sscanf(tag, "$GPGGA,%lf,%lf,%c,%lf,%c,", &gp_info.utc, &gp_info.lat, &gp_info.lat_dir, &gp_info.logt, &gp_info.logt_dir);
     
-    //printf("%s | utc = %lf , lat = %lf %c , longt = %lf %c\n", tag, gp_info.utc, gp_info.lat, gp_info.lat_dir, gp_info.logt, gp_info.logt_dir);
-    
+    //printf("utc = %lf , lat = %lf %c , longt = %lf %c\n\n", gp_info.utc, gp_info.lat, gp_info.lat_dir, gp_info.logt, gp_info.logt_dir);
+
     if(gps_callbacks.on_gps != NULL) {
         gps_callbacks.on_gps(tag, gp_info, t_len);
     }
 
-    //free(tag);
+    free(tag);
 }
