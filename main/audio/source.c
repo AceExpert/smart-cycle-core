@@ -23,6 +23,13 @@ i2s_chan_handle_t* i2s_chan = NULL;
 
 uint8_t* speaker_addr = NULL;
 
+struct disc_result_t {
+    uint8_t bd_addr[6];
+    int8_t rssi;
+}* disc_result = NULL;
+
+int disc_len = 0;
+
 uint8_t hfp_on = 0;
 uint8_t hfp_off = 0;
 uint8_t aud_suspend = 1;
@@ -45,7 +52,7 @@ void set_on_speaker_connect(void (*callb)()) {
     callbacks.speaker_connected = callb;
 }
 
-void set_custom_play(const char* path) {
+void set_custom_play(char* path) {
     custom_play_path = path;
 }
 
@@ -167,7 +174,6 @@ void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 
     case ESP_BT_GAP_DISC_STATE_CHANGED_EVT: {
         if(param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
-            printf("Discovery stopped\n");
             speaker_disc_cmd(".sdisc_end", 10);
         } else if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STARTED) {
             speaker_disc_cmd(".sdisc_start", 12);
@@ -178,26 +184,35 @@ void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
     case ESP_BT_GAP_DISC_RES_EVT: {
         char* dev_name = NULL;
         int dev_name_len = 0;
+        int8_t rssi = -126;
         uint32_t* cod = NULL;
-        int8_t rssi = -200;
+        uint8_t* eir = NULL;
+        int eir_len = 0;
+
         for(int i = 0; i < param->disc_res.num_prop; i++) {
             if(param->disc_res.prop[i].type == ESP_BT_GAP_DEV_PROP_COD) {
                 cod = (uint32_t*)param->disc_res.prop[i].val;
             } else if (param->disc_res.prop[i].type == ESP_BT_GAP_DEV_PROP_RSSI) {
                 rssi = *(int8_t*)param->disc_res.prop[i].val;
             } else if (param->disc_res.prop[i].type == ESP_BT_GAP_DEV_PROP_BDNAME) {
-                dev_name = param->disc_res.prop[i].val;
-                dev_name_len = param->disc_res.prop[i].len;
+            } else if (param->disc_res.prop[i].type == ESP_BT_GAP_DEV_PROP_EIR) {
+                eir = (uint8_t*)(param->disc_res.prop[i].val);
             }
         }
-       if(esp_bt_gap_get_cod_major_dev(*cod) == ESP_BT_COD_MAJOR_DEV_AV && dev_name_len) {
+        if(esp_bt_gap_get_cod_major_dev(*cod) == ESP_BT_COD_MAJOR_DEV_AV && eir) {
+            dev_name = (char*)esp_bt_gap_resolve_eir_data(eir, ESP_BT_EIR_TYPE_CMPL_LOCAL_NAME, &eir_len);
+            if(!dev_name) {
+                dev_name = (char*)esp_bt_gap_resolve_eir_data(eir, ESP_BT_EIR_TYPE_SHORT_LOCAL_NAME, &eir_len);
+            }
+            if(!dev_name) return;
+            dev_name_len = eir_len >= 100? 100 : eir_len;
             uint8_t* cmd = malloc(7 + 4 + dev_name_len + 6 + 1);
             memcpy(cmd, ".sdisc ", 7);
-            memcpy(cmd + 7, dev_name_len, 4);
+            memcpy(cmd + 7, &dev_name_len, 4);
             memcpy(cmd + 7 + 4, dev_name, dev_name_len);
             memcpy(cmd + 7 + 4 + dev_name_len, param->disc_res.bda, 6);
-            memcpy(cmd + 7 + 4 + dev_name_len + 6, rssi, 1);
-            speaker_disc_cmd(cmd, 7 + 4 + dev_name_len + 6 + 1);
+            memcpy(cmd + 7 + 4 + dev_name_len + 6, &rssi, 1);
+            speaker_disc_cmd((char*)cmd, 7 + 4 + dev_name_len + 6 + 1);
         }
         break;
     }
@@ -238,7 +253,7 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     {
     case ESP_A2D_PROF_STATE_EVT: {
         if (param->a2d_prof_stat.init_state == ESP_A2D_INIT_SUCCESS) {
-            speaker_addr = get_cache_field("speaker_addr");
+            speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
             if(speaker_addr) {
                 esp_a2d_source_connect(speaker_addr);
             }

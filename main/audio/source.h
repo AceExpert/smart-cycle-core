@@ -30,7 +30,7 @@ void cruise_mode();
 void i2s_handle_set(i2s_chan_handle_t* chan);
 i2s_chan_handle_t* i2s_handle_get();
 void set_on_speaker_connect(void (*)());
-void set_custom_play(const char* path);
+void set_custom_play(char* path);
 void in_call();
 void end_call();
 void connect_speaker();
