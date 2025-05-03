@@ -197,8 +197,12 @@ struct user_cache* get_all_field() {
                 break;
             };
         }
-        cached[cached_len++].value = read_data;
-        read_data[total_read - 1] = 0;
+        if(!total_read) {
+            cached[cached_len++].value = NULL;
+        } else {
+            cached[cached_len++].value = read_data;
+            read_data[total_read - 1] = 0;
+        };
     
         field_len = 0;
     };
@@ -267,7 +271,6 @@ float get_g() {
     sscanf(value, "%f", &g);
     return g;
 }
-
 
 uint8_t get_bool(const char* field) {
     char* value = get_cache_field(field);

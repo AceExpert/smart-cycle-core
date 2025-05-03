@@ -106,6 +106,7 @@ void add_playlist(const char* path, uint8_t repeat) {
     strcpy(new_play->play, path);
     new_play->repeat = repeat;
     new_play->next = NULL;
+    new_play->play_file = NULL;
     struct local_playlist* prev_play = playlist;
     while (prev_play)
     {
@@ -123,6 +124,10 @@ void add_playlist(const char* path, uint8_t repeat) {
 void pop_playlist(struct local_playlist** p) {
     if(p && *p) {
         struct local_playlist* temp = (*p)->next;
+        if((*p)->play_file && *(*p)->play_file) {
+            fclose(*(*p)->play_file);
+            *(*p)->play_file = NULL;
+        }
         free((*p)->play);
         free(*p);
         *p = temp;
@@ -149,7 +154,7 @@ void clear_playlist(int index) {
     else
         playlist = NULL;
 
-    if(play_file) {
+    if(play_file && !index) {
         fclose(play_file);
         play_file = NULL;
     };
@@ -362,17 +367,21 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
         }
     }
     else if (playlist) {
-        if(play_file == NULL) play_file = fopen(playlist->play, "r");
+        if(play_file == NULL) {
+            play_file = fopen(playlist->play, "r");
+            playlist->play_file = &play_file;
+        };
         if(feof(play_file) != 0) {
             if(playlist->repeat) {
                 fseek(play_file, 0, SEEK_SET);
             } else {
                 fclose(play_file);
+                play_file = NULL;
                 pop_playlist(&playlist);
                 if(playlist) {
                     play_file = fopen(playlist->play, "r");
+                    playlist->play_file = &play_file;
                 } else {
-                    play_file = NULL;
                     if(i2s_chan == NULL) esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
                     return 0;
                 }

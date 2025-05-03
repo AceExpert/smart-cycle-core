@@ -12,6 +12,7 @@ struct local_playlist {
     char* play;
     uint8_t repeat;
     int id;
+    FILE** play_file;
     struct local_playlist* next;
 };
 

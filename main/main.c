@@ -241,6 +241,8 @@ void app_main(void)
     gpio_reset_pin(GPIO_NUM_27);
     gpio_reset_pin(GPIO_NUM_14);
     gpio_reset_pin(GPIO_NUM_12);
+    gpio_reset_pin(GPIO_NUM_25);
+    gpio_reset_pin(GPIO_NUM_26);
     
     gpio_set_direction(GPIO_NUM_27, GPIO_MODE_OUTPUT);
     gpio_set_direction(GPIO_NUM_14, GPIO_MODE_OUTPUT);
@@ -251,6 +253,9 @@ void app_main(void)
 
     dac_oneshot_new_channel(&h1_config, &h1);
     dac_oneshot_new_channel(&h2_config, &h2);
+
+    dac_oneshot_output_voltage(h1, 127);
+    dac_oneshot_output_voltage(h2, 255);
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -330,12 +335,44 @@ void app_main(void)
     TimerHandle_t user_setup = xTimerCreate("user_setup_timer", pdMS_TO_TICKS(500), pdFALSE, NULL, user_setup_timer);
     xTimerReset(user_setup, portMAX_DELAY); 
     //xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
-    
+    xTaskCreate(haptic_pulse, "haptic_pulse", 2048, 1, 4, NULL);
+}
+
+void haptic_pulse(void* param) {
+    int minfo = (int)param;
+    if(minfo == 1) {
+        dac_oneshot_output_voltage(h1, 255);
+    } else if (minfo == 2) {
+        dac_oneshot_output_voltage(h2, 255);
+    } else if (minfo == 3) {
+        dac_oneshot_output_voltage(h1, 255);
+        dac_oneshot_output_voltage(h2, 255);
+    } else {
+        dac_oneshot_output_voltage(h1, 0);
+        dac_oneshot_output_voltage(h2, 0);
+    };
+
+    if(!minfo) {
+        vTaskDelete(NULL);
+        return;    
+    };
+
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    if(minfo == 1) {
+        dac_oneshot_output_voltage(h1, 0);
+    } else if (minfo == 2) {
+        dac_oneshot_output_voltage(h2, 0);
+    } else if (minfo == 3) {
+        dac_oneshot_output_voltage(h1, 0);
+        dac_oneshot_output_voltage(h2, 0);
+    };
+    vTaskDelete(NULL);
 }
 
 void on_speaker_connect() {
     //esp_ble_gap_start_advertising(&adv_params);
-}
+};
 
 void set_new_force_thresh() {
     force_thresh = get_force_thresh();
