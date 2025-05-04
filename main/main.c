@@ -375,7 +375,7 @@ void gps_server(void*) {
                         };
                         gps_server_callbacks.on_authorized(server_socket);
                         if(gps_alive == NULL) 
-                            gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(60000), pdFALSE, NULL, gps_serv_alive);
+                            gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(300000), pdFALSE, NULL, gps_serv_alive);
                         xTimerReset(gps_alive, portMAX_DELAY);
                     } else {
                         server_connected = 0;
@@ -397,7 +397,7 @@ void gps_server(void*) {
                 } else {
 
                     if(gps_alive == NULL) 
-                        gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(60000), pdFALSE, NULL, gps_serv_alive);
+                        gps_alive = xTimerCreate("gps_alive_timer", pdMS_TO_TICKS(300000), pdFALSE, NULL, gps_serv_alive);
                     xTimerReset(gps_alive, portMAX_DELAY);
                 };
             }
@@ -640,7 +640,7 @@ void send_alert(TimerHandle_t timer) {
 }
 
 void on_gps_connected(int phone_sock) {
-    gps_start_reading();
+    //gps_start_reading();
 }
 
 void on_gps_disconnected(int phone_sock) {
@@ -753,6 +753,7 @@ void uart_cmd_task(void*) {
                                 send_uart_cmd(UART_NUM_2, ".cruise\n", 8);
                             } else {
                                 process_cmd("alert");
+                                gps_start_reading();
                                 send_uart_cmd(UART_NUM_2, ".alert\n", 7);
                                 printf("alert\n");
                                 alert_time = time(NULL);
@@ -769,6 +770,7 @@ void uart_cmd_task(void*) {
                             turb_time = 0;
                             alert_time = 0;
                             send_uart_cmd(UART_NUM_2, ".alert_stop\n", 12);
+                            gps_stop_reading();
                             printf("alert stop\n");
                         }
                     } 
