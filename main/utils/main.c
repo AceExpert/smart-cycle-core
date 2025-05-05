@@ -81,7 +81,7 @@ void progress_uart_queue() {
     if(uart_q == NULL) return;
     uart_write_bytes(uart_q->port, uart_q->data, uart_q->size);
     if (uart_timer == NULL) {
-        uart_timer = xTimerCreate("uart_timer", pdMS_TO_TICKS(100), pdTRUE, NULL, uart_check);
+        uart_timer = xTimerCreate("uart_timer", pdMS_TO_TICKS(200), pdTRUE, NULL, uart_check);
     } 
     xTimerReset(uart_timer, portMAX_DELAY);
 }
