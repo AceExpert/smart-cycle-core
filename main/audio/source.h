@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-//#include "driver/i2s_std.h"
+#include "driver/i2s_std.h"
 
 #include "esp_bt.h"
 #include "esp_gap_bt_api.h"

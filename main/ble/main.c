@@ -18,6 +18,7 @@
 #include "main.h"
 #include "../utils/main.h"
 #include "../user_data/main.h"
+#include "../audio/source.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,7 +26,7 @@
 
 TimerHandle_t auth_timer = NULL;
 
-int cycle_state = LOCKED;
+int setting_states = 0;
 
 dac_oneshot_handle_t motor1;
 dac_oneshot_handle_t motor2;
@@ -39,6 +40,10 @@ struct {
 void set_motor_channels(dac_oneshot_handle_t* h1, dac_oneshot_handle_t* h2) {
     motor1 = *h1;
     motor2 = *h2;
+}
+
+void set_adc_handle(adc_continuous_handle_t adc_h) {
+    force_adc = adc_h;
 }
 
 struct gatts_prof* get_gatts_prof() {
@@ -182,8 +187,8 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                     } 
                     else if (match("speaker_addr", res[1].text, 12, res[1].len)) {
                         update_field("speaker_addr", (uint8_t*)res[2].text, 6);
-                        save_user_info();
-                        esp_a2d_source_connect((uint8_t*)res[2].text);
+                        adc_continuous_stop(force_adc);
+                        connect_speaker();
                     } else if (match("user_name", res[1].text, 9, res[1].len)) {
                         update_field("user", (uint8_t*)res[2].text, res[2].len);
                         save_user_info();
@@ -193,15 +198,25 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                     } else if (match("gps_token", res[1].text, 9, res[1].len)) {
                         update_field("gps_token", (uint8_t*)res[2].text, res[2].len);
                         save_user_info();
-                    } else if (match("force_sense", res[1].text, 9, res[1].len)) {
-                        update_field("force_sense", (uint8_t*)res[2].text, res[2].len);
-                        save_user_info();
-                        if(cycle_callbacks.force_thresh_change != NULL) {
-                            cycle_callbacks.force_thresh_change();
-                        }
                     } else if (match("set_alarm", res[1].text, 9, res[1].len)) {
                         update_field("alarm", (uint8_t*)res[2].text, 1);
                         save_user_info();
+                    } else if (match("set_total", res[1].text, 9, res[1].len)) {
+                        res[2].text = realloc(res[2].text, res[2].len + 1);
+                        res[2].text[res[2].len] = 0;
+                        sscanf(res[2].text, "%d", &setting_states);
+                    } else if (match("set_state", res[1].text, 9, res[1].len)) {
+                        res[2].text = realloc(res[2].text, res[2].len + 1);
+                        res[2].text[res[2].len] = 0;
+                        update_field(res[2].text, (uint8_t*)res[3].text, res[3].len);
+                        if((--setting_states) == 0) {
+                            adc_continuous_stop(force_adc);
+                            save_user_info();
+                            cycle_callbacks.force_thresh_change();
+                            if(cycle_state == UNLOCKED && get_force_active()) {
+                                adc_continuous_start(force_adc);
+                            }
+                        }
                     } else if (match("speaker_setup", res[1].text, 13, res[1].len)) {
                         esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 0x10, 10);
                     }
@@ -228,7 +243,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                     } else if (match("dir_stop", res[1].text, 8, res[1].len)) {
                         direction_indic(-1, 0, 0);
 
-                    }else if (match("destination", res[1].text, 11, res[1].len)) {
+                    } else if (match("destination", res[1].text, 11, res[1].len)) {
 
                     } else if (match("audio_connect", res[1].text, 13, res[1].len)) {
                         char cmd[22] = ".audio_connect ";

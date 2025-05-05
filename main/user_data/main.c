@@ -240,7 +240,6 @@ void save_user_info() {
         fwrite(":", 1, 1, user_info);
         fwrite(cached[i].value, 1, strlen(cached[i].value), user_info);
         fwrite("\n", 1, 1, user_info);
-        fflush(user_info);
     }
     fclose(user_info);
 }

@@ -153,6 +153,8 @@ void setup_ble() {
     set_cycle_callback(UNLOCKED, cycle_unlocked);
     set_cycle_callback(THRESH, set_new_force_thresh);
 
+    set_adc_handle(adc_handle);
+
     esp_ble_gap_register_callback(esp_ble_gap_cb);
     esp_ble_gatts_register_callback(esp_gatts_cb);
     esp_ble_gatts_app_register(0);
@@ -232,6 +234,9 @@ void user_setup_timer(TimerHandle_t timer) {
     setup_user_info();
     get_all_field();
     set_new_force_thresh();
+    if(get_cache_field("speaker_addr")) {
+        connect_speaker();
+    }
 }
 
 void app_main(void)
@@ -335,7 +340,7 @@ void app_main(void)
     TimerHandle_t user_setup = xTimerCreate("user_setup_timer", pdMS_TO_TICKS(500), pdFALSE, NULL, user_setup_timer);
     xTimerReset(user_setup, portMAX_DELAY); 
     //xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
-    xTaskCreate(haptic_pulse, "haptic_pulse", 2048, 1, 4, NULL);
+    //xTaskCreate(haptic_pulse, "haptic_pulse", 2048, 1, 4, NULL);
 }
 
 void haptic_pulse(void* param) {
@@ -375,7 +380,7 @@ void on_speaker_connect() {
 };
 
 void set_new_force_thresh() {
-    force_thresh = get_force_thresh();
+    force_thresh = 800 + get_force_thresh() * 22;
 }
 
 void cycle_unlocked() {
@@ -385,7 +390,9 @@ void cycle_unlocked() {
     add_playlist("/sdcard/startup.pcm", 0);
     //add_playlist("/sdcard/music.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    adc_continuous_start(adc_handle);
+    if(get_force_active()) {
+        adc_continuous_start(adc_handle);
+    };
 }
 
 void cycle_locked() {

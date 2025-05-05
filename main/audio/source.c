@@ -57,7 +57,7 @@ void set_custom_play(char* path) {
 }
 
 void connect_speaker() {
-    memcpy(speaker_addr, get_cache_field("speaker_addr"), 6);
+    speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
     esp_a2d_source_connect(speaker_addr);
 }
 
@@ -258,10 +258,6 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
     {
     case ESP_A2D_PROF_STATE_EVT: {
         if (param->a2d_prof_stat.init_state == ESP_A2D_INIT_SUCCESS) {
-            speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
-            if(speaker_addr) {
-                esp_a2d_source_connect(speaker_addr);
-            }
             //esp_a2d_source_connect(speaker_addr);
             //esp_hf_ag_slc_connect(speaker_addr);
         }
@@ -271,6 +267,10 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         switch (param->conn_stat.state)
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
+            save_user_info();
+            if(get_force_active() && cycle_state == UNLOCKED) {
+                adc_continuous_start(force_adc);
+            }
             if(speaker_addr == NULL) {
                 speaker_addr = malloc(6);
                 memcpy(speaker_addr, param->conn_stat.remote_bda, 6);
