@@ -73,7 +73,8 @@ int split(const unsigned char* str, int len, char delim, struct split_result* re
 }
 
 void uart_check(TimerHandle_t timer) {
-    uart_write_bytes(uart_q->port, uart_q->data, uart_q->size);
+    if(uart_q)
+        uart_write_bytes(uart_q->port, uart_q->data, uart_q->size);
 }
 
 void progress_uart_queue() {
