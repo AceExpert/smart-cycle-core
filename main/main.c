@@ -417,6 +417,7 @@ void lock_motor_control(void*) {
 }
 
 void process_cmd(const char* cmd) {
+    printf("%s\n", cmd);
     if (strcmp(cmd, "ack") == 0) {
         acked();
     } else if(strcmp(cmd, "state") == 0) {
