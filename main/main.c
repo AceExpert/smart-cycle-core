@@ -703,7 +703,7 @@ void uart_cmd_task(void*) {
     while(1) {
 
         uint8_t d;
-        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, pdMS_TO_TICKS(1) / 2);
+        int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
             
         if(cmd_start) {
             if (read_len < 1) {
