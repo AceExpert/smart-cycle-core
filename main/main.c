@@ -234,9 +234,9 @@ void user_setup_timer(TimerHandle_t timer) {
     setup_user_info();
     get_all_field();
     set_new_force_thresh();
-    if(get_cache_field("speaker_addr")) {
+    //if(get_cache_field("speaker_addr")) {
         connect_speaker();
-    }
+    //}
 }
 
 void app_main(void)

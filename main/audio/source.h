@@ -35,3 +35,4 @@ void set_custom_play(char* path);
 void in_call();
 void end_call();
 void connect_speaker();
+void reconfig_speaker();

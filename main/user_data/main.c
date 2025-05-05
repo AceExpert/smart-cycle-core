@@ -210,16 +210,16 @@ struct user_cache* get_all_field() {
     return cached;
 }
 
-uint8_t update_field(const char* field, uint8_t* value, size_t value_len) {
+uint8_t* update_field(const char* field, uint8_t* value, size_t value_len) {
     for(int i = 0; i < cached_len; i++) {
         if(strcmp(cached[i].name, field) == 0) {
             cached[i].value = realloc(cached[i].value, value_len + 1);
             memcpy(cached[i].value, value, value_len);
             cached[i].value[value_len] = 0;
-            return 1;
+            return (uint8_t*)(cached[i].value);
         }
     }
-    return 0;
+    return NULL;
 }
 
 void save_user_info() {

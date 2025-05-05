@@ -186,9 +186,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         }
                     } 
                     else if (match("speaker_addr", res[1].text, 12, res[1].len)) {
-                        update_field("speaker_addr", (uint8_t*)res[2].text, 6);
-                        adc_continuous_stop(force_adc);
-                        connect_speaker();
+                        reconfig_speaker(res[2].text);
                     } else if (match("user_name", res[1].text, 9, res[1].len)) {
                         update_field("user", (uint8_t*)res[2].text, res[2].len);
                         save_user_info();

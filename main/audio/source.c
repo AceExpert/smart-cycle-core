@@ -21,8 +21,6 @@ struct local_playlist* playlist = NULL;
 
 i2s_chan_handle_t* i2s_chan = NULL;
 
-uint8_t* speaker_addr = NULL;
-
 struct disc_result_t {
     uint8_t bd_addr[6];
     int8_t rssi;
@@ -33,6 +31,11 @@ int disc_len = 0;
 uint8_t hfp_on = 0;
 uint8_t hfp_off = 0;
 uint8_t aud_suspend = 1;
+
+uint8_t speaker_reconfig = 0;
+esp_bd_addr_t new_speaker_address;
+
+esp_bd_addr_t speaker_addr = {0x84, 0xf, 0x2a, 0xc8, 0x13, 0x5d};
 
 char* custom_play_path = NULL;
 
@@ -57,12 +60,24 @@ void set_custom_play(char* path) {
 }
 
 void connect_speaker() {
-    speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
+    /*speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
+    esp_bd_addr_t spk_addr = {0x84, 0xf, 0x2a, 0xc8, 0x13, 0x5d};
+    speaker_addr = update_field("speaker_addr", spk_addr, 6);*/
     esp_a2d_source_connect(speaker_addr);
+}
+
+void reconfig_speaker(esp_bd_addr_t new_address) {
+    adc_continuous_stop(force_adc);
+    speaker_reconfig = 1;
+    memcpy(new_speaker_address, new_address, 6);
+    esp_hf_ag_slc_disconnect(speaker_addr);
+    esp_hf_ag_audio_disconnect(speaker_addr);
+    esp_a2d_source_disconnect(speaker_addr);
 }
 
 void in_call() {
     hfp_on = 1;
+    printf("in call\n");
     i2s_stop(I2S_NUM_1);
     i2s_set_clk(I2S_NUM_1, 16000, I2S_DATA_BIT_WIDTH_16BIT, I2S_CHANNEL_STEREO);
     i2s_start(I2S_NUM_1);
@@ -82,6 +97,7 @@ void in_call() {
 }
 
 void end_call() {
+    printf("out call\n");
     hfp_on = 0;
     hfp_off = 1;
     i2s_stop(I2S_NUM_1);
@@ -267,14 +283,17 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         switch (param->conn_stat.state)
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
-            save_user_info();
-            if(get_force_active() && cycle_state == UNLOCKED) {
-                adc_continuous_start(force_adc);
+            /*if (speaker_reconfig) {
+                speaker_addr = update_field("speaker_addr", new_speaker_address, 6);
+                save_user_info();
+                if(get_force_active() && cycle_state == UNLOCKED) {
+                    adc_continuous_start(force_adc);
+                }
+                speaker_reconfig = 0;
             }
-            if(speaker_addr == NULL) {
-                speaker_addr = malloc(6);
-                memcpy(speaker_addr, param->conn_stat.remote_bda, 6);
-            }
+            else if(speaker_addr == NULL) {
+                speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
+            }*/
             if(callbacks.speaker_connected) callbacks.speaker_connected();
             printf("Speaker connected.\n");
             if(!hfp_on && !hfp_off) esp_hf_ag_slc_connect(speaker_addr);
@@ -282,7 +301,12 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
             aud_suspend = 1;
-            esp_a2d_source_connect(speaker_addr);
+            if(/*speaker_addr && */!speaker_reconfig) {
+                esp_a2d_source_connect(speaker_addr);
+            };
+            if(speaker_reconfig) {
+                esp_a2d_source_connect(new_speaker_address);
+            }
             break;
         default: {
             break;
@@ -412,7 +436,9 @@ void esp_hf_ag_cb(esp_hf_cb_event_t event, esp_hf_cb_param_t* param) {
         }
         if(param->conn_stat.state == ESP_HF_CONNECTION_STATE_DISCONNECTED) {
             printf("HFP Ag disconnected.\n");
-            esp_hf_ag_slc_connect(speaker_addr);
+            if(!speaker_reconfig) {
+                esp_hf_ag_slc_connect(speaker_addr);
+            };
         }
         break;
 
