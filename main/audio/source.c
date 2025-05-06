@@ -35,7 +35,7 @@ uint8_t aud_suspend = 1;
 uint8_t speaker_reconfig = 0;
 esp_bd_addr_t new_speaker_address;
 
-uint8_t* speaker_addr = NULL;
+uint8_t* speaker_addr;
 
 char* custom_play_path = NULL;
 
@@ -64,7 +64,7 @@ void connect_speaker() {
     esp_a2d_source_connect(speaker_addr);
 }
 
-void reconfig_speaker(esp_bd_addr_t new_address) {
+void reconfig_speaker(uint8_t* new_address) {
     adc_continuous_stop(force_adc);
     speaker_reconfig = 1;
     memcpy(new_speaker_address, new_address, 6);
@@ -292,6 +292,7 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
             else if(speaker_addr == NULL) {
                 speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
             }
+            //esp_ble_gap_start_advertising(&adv_params);
             if(callbacks.speaker_connected) callbacks.speaker_connected();
             printf("Speaker connected.\n");
             if(!hfp_on && !hfp_off) esp_hf_ag_slc_connect(speaker_addr);

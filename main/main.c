@@ -469,10 +469,6 @@ void monitor_motion(void*) {
 
         uint8_t d;
         int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
-        if(read_len) {
-            if(d == '\n') printf("\\n");
-            printf("%c", d);
-        }
         
         if(cmd_start) {
             if (read_len < 1) {
