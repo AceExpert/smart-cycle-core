@@ -620,7 +620,7 @@ void app_main(void)
     start_bluetooth();
     setup_gps();
 
-    xTaskCreate(uart_cmd_task, "uart_cmd_task", 3584, NULL, 4, uart_task);
+    xTaskCreate(uart_cmd_task, "uart_cmd_", 3584, NULL, 4, uart_task);
 }
 
 void send_gps(const char* tag, struct gps_info gpsinfo, int tlen) {
@@ -704,11 +704,7 @@ void uart_cmd_task(void*) {
 
         uint8_t d;
         int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
-        if(read_len) {
-            if(d == '\n') printf("\\n");
-            printf("%c", d);
-        }    
-
+        
         if(cmd_start) {
             if (read_len < 1) {
                 cmd_start = 0;
@@ -734,7 +730,6 @@ void uart_cmd_task(void*) {
         if (read_len && d == '.') {
             cmd_start = 1;
         }
-        
         if(!cruise) {
             int16_t accel[3];
             if(i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1) == 0) {
@@ -744,7 +739,6 @@ void uart_cmd_task(void*) {
                 accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
 
                 double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
-
                 if (ABS(net_a - 10.5) >= 0.6) {
                     if(alert_time) {
                         alert_time = time(NULL);
@@ -757,7 +751,7 @@ void uart_cmd_task(void*) {
                                 send_uart_cmd(UART_NUM_2, ".cruise\n", 8);
                             } else {
                                 process_cmd("alert");
-                                gps_start_reading();
+                                //gps_start_reading();
                                 send_uart_cmd(UART_NUM_2, ".alert\n", 7);
                                 printf("alert\n");
                                 alert_time = time(NULL);
@@ -793,7 +787,7 @@ void uart_cmd_task(void*) {
         };
 
         if(!cmd_start)
-            vTaskDelay(pdMS_TO_TICKS(7));
+            vTaskDelay(pdMS_TO_TICKS(10));
 
     };
     vTaskDelete(NULL);
