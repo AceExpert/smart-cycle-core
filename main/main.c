@@ -871,9 +871,9 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
 
         strcpy((char*)(ap_config.sta.password), WIFI_PSWD);
 
-        //strcpy((char*)ap_config.sta.ssid, "SputhNet");
-        //strcpy((char*)ap_config.sta.password, "hotspot.sputh");
-        //esp_wifi_sta_enterprise_disable();
+        strcpy((char*)ap_config.sta.ssid, "CyberSky");
+        strcpy((char*)ap_config.sta.password, "hotspot.jio");
+        esp_wifi_sta_enterprise_disable();
 
         esp_wifi_set_config(WIFI_IF_STA, &ap_config);
         esp_wifi_connect();
