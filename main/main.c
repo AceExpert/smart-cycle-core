@@ -447,10 +447,10 @@ void process_cmd(const char* cmd) {
         add_playlist("/sdcard/alarm.pcm", 1);
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     } else if (strcmp(cmd, "cruise") == 0) {
-        /*if(!cruise) {
+        if(!cruise) {
             cruise = 1;
             cruise_mode();
-        }*/
+        }
     } else if (strcmp(cmd, "alert_stop") == 0) {    
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
         clear_playlist(0);

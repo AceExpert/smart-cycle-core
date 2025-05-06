@@ -111,7 +111,9 @@ void esp_ble_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param)
     switch (event)
     {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
-        esp_ble_gap_start_advertising(&adv_params);
+        if(get_cache_field("speaker_addr") == NULL) {
+            esp_ble_gap_start_advertising(&adv_params);
+        };
         break;
     default:
         break;
@@ -143,6 +145,8 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
         esp_ble_conn_update_params_t conn_params = {0};
         
         esp_ble_gap_stop_advertising();
+
+        gatts_profile[0].connected = 1;
 
         gatts_profile[0].conn_id = param->connect.conn_id;
         memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
@@ -300,6 +304,7 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
     }
 
     case ESP_GATTS_DISCONNECT_EVT: {
+        gatts_profile[0].connected = 0;
         cycle_state = LOCKED;
         if(cycle_callbacks.locked != NULL) {
             cycle_callbacks.locked();

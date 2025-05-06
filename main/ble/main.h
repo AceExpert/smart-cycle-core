@@ -39,9 +39,11 @@ static struct gatts_prof {
     esp_gatt_char_prop_t property;
     uint16_t descr_handle;
     esp_bt_uuid_t descr_uuid;
+    uint8_t connected;
 } gatts_profile[1] = {
     {
-        .gatts_if = ESP_GATT_IF_NONE
+        .gatts_if = ESP_GATT_IF_NONE,
+        .connected = 0,
     }
 };
 

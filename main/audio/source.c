@@ -281,6 +281,10 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         switch (param->conn_stat.state)
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
+            if(!gatts_profile[0].connected) {
+                esp_ble_gap_start_advertising(&adv_params);
+            }
+
             if (speaker_reconfig) {
                 speaker_addr = update_field("speaker_addr", new_speaker_address, 6);
                 save_user_info();
@@ -292,7 +296,6 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
             else if(speaker_addr == NULL) {
                 speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
             }
-            //esp_ble_gap_start_advertising(&adv_params);
             if(callbacks.speaker_connected) callbacks.speaker_connected();
             printf("Speaker connected.\n");
             if(!hfp_on && !hfp_off) esp_hf_ag_slc_connect(speaker_addr);
