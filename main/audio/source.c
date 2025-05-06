@@ -35,7 +35,7 @@ uint8_t aud_suspend = 1;
 uint8_t speaker_reconfig = 0;
 esp_bd_addr_t new_speaker_address;
 
-esp_bd_addr_t speaker_addr = {0x84, 0xf, 0x2a, 0xc8, 0x13, 0x5d};
+uint8_t* speaker_addr = NULL;
 
 char* custom_play_path = NULL;
 
@@ -60,9 +60,7 @@ void set_custom_play(char* path) {
 }
 
 void connect_speaker() {
-    /*speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
-    esp_bd_addr_t spk_addr = {0x84, 0xf, 0x2a, 0xc8, 0x13, 0x5d};
-    speaker_addr = update_field("speaker_addr", spk_addr, 6);*/
+    speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
     esp_a2d_source_connect(speaker_addr);
 }
 
@@ -283,17 +281,17 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         switch (param->conn_stat.state)
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
-            /*if (speaker_reconfig) {
+            if (speaker_reconfig) {
                 speaker_addr = update_field("speaker_addr", new_speaker_address, 6);
                 save_user_info();
-                if(get_force_active() && cycle_state == UNLOCKED) {
+                if(get_force_active() && get_cycle_state() == UNLOCKED) {
                     adc_continuous_start(force_adc);
                 }
                 speaker_reconfig = 0;
             }
             else if(speaker_addr == NULL) {
                 speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
-            }*/
+            }
             if(callbacks.speaker_connected) callbacks.speaker_connected();
             printf("Speaker connected.\n");
             if(!hfp_on && !hfp_off) esp_hf_ag_slc_connect(speaker_addr);
@@ -301,7 +299,7 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
             break;
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
             aud_suspend = 1;
-            if(/*speaker_addr && */!speaker_reconfig) {
+            if(speaker_addr && !speaker_reconfig) {
                 esp_a2d_source_connect(speaker_addr);
             };
             if(speaker_reconfig) {

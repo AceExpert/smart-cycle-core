@@ -25,7 +25,6 @@ static esp_ble_adv_params_t adv_params = {
 };
 
 static adc_continuous_handle_t force_adc = NULL;
-static int cycle_state = 0;
 
 static struct gatts_prof {
     esp_gatts_cb_t gatts_cb;
@@ -93,3 +92,4 @@ struct gatts_prof* get_gatts_prof();
 void set_motor_channels(dac_oneshot_handle_t* h1, dac_oneshot_handle_t* h2);
 void speaker_disc_cmd(const char* d, int len);
 void set_adc_handle(adc_continuous_handle_t adc_h);
+uint8_t get_cycle_state();

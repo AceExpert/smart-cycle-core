@@ -234,9 +234,9 @@ void user_setup_timer(TimerHandle_t timer) {
     setup_user_info();
     get_all_field();
     set_new_force_thresh();
-    //if(get_cache_field("speaker_addr")) {
+    if(get_cache_field("speaker_addr")) {
         connect_speaker();
-    //}
+    }
 }
 
 void app_main(void)
@@ -447,11 +447,11 @@ void process_cmd(const char* cmd) {
         add_playlist("/sdcard/alarm.pcm", 1);
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     } else if (strcmp(cmd, "cruise") == 0) {
-        if(!cruise) {
+        /*if(!cruise) {
             cruise = 1;
             cruise_mode();
-        }
-    } else if (strcmp(cmd, "alert_stop") == 0 && !cruise) {    
+        }*/
+    } else if (strcmp(cmd, "alert_stop") == 0) {    
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
         clear_playlist(0);
     }

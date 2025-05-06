@@ -28,6 +28,8 @@ TimerHandle_t auth_timer = NULL;
 
 int setting_states = 0;
 
+int cycle_state = LOCKED;
+
 dac_oneshot_handle_t motor1;
 dac_oneshot_handle_t motor2;
 
@@ -95,6 +97,10 @@ void direction_indic(int8_t dynam, uint8_t m1, uint8_t m2) {
     default:
         break;
     };
+}
+
+uint8_t get_cycle_state() {
+    return cycle_state;
 }
 
 void unauthorize(TimerHandle_t timer) {
