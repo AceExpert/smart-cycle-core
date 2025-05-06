@@ -116,6 +116,7 @@ void media_ctrl_exec(void*);
 bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data);
 void lock_motor_control(void*);
 void set_new_force_thresh();
+void haptic_pulse(void* param);
 
 void start_bluetooth() {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
