@@ -218,6 +218,7 @@ void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
                 eir = (uint8_t*)(param->disc_res.prop[i].val);
             }
         }
+        if(!cod) return;
         if(esp_bt_gap_get_cod_major_dev(*cod) == ESP_BT_COD_MAJOR_DEV_AV && eir) {
             dev_name = (char*)esp_bt_gap_resolve_eir_data(eir, ESP_BT_EIR_TYPE_CMPL_LOCAL_NAME, &eir_len);
             if(!dev_name) {
@@ -350,6 +351,8 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
             if(hfp_off || hfp_on) {
                 hfp_off = 0;
                 hfp_on = 0;
+                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+            } else if (i2s_handle_get()) {
                 esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
             }
         }

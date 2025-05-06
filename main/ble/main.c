@@ -33,6 +33,9 @@ int cycle_state = LOCKED;
 dac_oneshot_handle_t motor1;
 dac_oneshot_handle_t motor2;
 
+esp_bd_addr_t reset_speaker_addr;
+uint8_t reset_speaker = 0;
+
 struct {
     void (*locked)();
     void (*unlocked)();
@@ -143,7 +146,9 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
 
     case ESP_GATTS_CONNECT_EVT: {
         esp_ble_conn_update_params_t conn_params = {0};
-        
+        if(reset_speaker) {
+            reset_speaker = 0;
+        }
         esp_ble_gap_stop_advertising();
 
         gatts_profile[0].connected = 1;
@@ -196,7 +201,9 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
                         }
                     } 
                     else if (match("speaker_addr", res[1].text, 12, res[1].len)) {
-                        reconfig_speaker((uint8_t*)(res[2].text));
+                        reset_speaker = 1;
+                        memcpy(reset_speaker_addr, res[2].text, 6);
+                        esp_ble_gatts_close(itf, param->write.conn_id);
                     } else if (match("user_name", res[1].text, 9, res[1].len)) {
                         update_field("user", (uint8_t*)res[2].text, res[2].len);
                         save_user_info();
@@ -309,7 +316,12 @@ void esp_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t itf, esp_ble_gatts_c
         if(cycle_callbacks.locked != NULL) {
             cycle_callbacks.locked();
         }
-        esp_ble_gap_start_advertising(&adv_params);
+        if(reset_speaker) {
+            esp_ble_gap_stop_advertising();
+            reconfig_speaker(reset_speaker_addr);
+        } else {
+            esp_ble_gap_start_advertising(&adv_params);
+        };
         send_uart_cmd(UART_NUM_2, ".audio_disconn\n", 15);
         break;
     }
