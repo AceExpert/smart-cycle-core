@@ -4,8 +4,8 @@
 
 #include "main.h"
 
-const char* file_format = "user:\ngps_token:\nphone_token:\nspeaker_addr:\nphone_addr:\nforce_sense:400\nalarm:1\nalarm_sense:1\ng:10\nforce:1\n";
-static int file_len = 107;
+const char* file_format = "user:\ngps_token:\nphone_token:\nspeaker_addr:\nphone_addr:\nforce_sense:30\nalarm:1\nalarm_sense:1\ng:10\nforce:1\n";
+static int file_len = 106;
 
 struct user_cache* cached = NULL;
 size_t cached_len = 0;
