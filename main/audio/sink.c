@@ -27,6 +27,14 @@ void set_i2s_rx_chan(i2s_chan_handle_t* i2s_rx) {
     rx_chan = i2s_rx;
 }*/
 
+struct sink_callbacks {
+    void (*on_audio_state)(uint8_t, uint8_t);
+} sink_cbs = {NULL};
+
+void set_audio_state_cb(void (*callback)(uint8_t, uint8_t)) {
+    sink_cbs.on_audio_state = callback;
+}
+
 void bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 {
     switch (event) {
@@ -74,6 +82,8 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         {
         case ESP_A2D_CONNECTION_STATE_CONNECTED:
             //i2s_channel_enable(*tx_chan);
+            if(sink_cbs.on_audio_state)
+                sink_cbs.on_audio_state(1, 0);
             i2s_start(I2S_NUM_1);
             send_uart_cmd(UART_NUM_2, ".audio_play\n", 12); 
             printf("Phone connected.\n");
@@ -81,6 +91,8 @@ void esp_a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t* param) {
         case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
             send_uart_cmd(UART_NUM_2, ".audio_stop\n", 12); 
             i2s_stop(I2S_NUM_1);
+            if(sink_cbs.on_audio_state)
+                sink_cbs.on_audio_state(0, 0);
             //i2s_channel_disable(*tx_chan);
             break;
         default: {
@@ -209,6 +221,8 @@ void hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_t *para
         if (param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_CONNECTED || param->audio_stat.state == ESP_HF_CLIENT_AUDIO_STATE_CONNECTED_MSBC) {
             esp_hf_client_register_data_callback(hf_recv_audio, hf_send_audio);
             //i2s_channel_enable(*rx_chan);
+            if(sink_cbs.on_audio_state)
+                sink_cbs.on_audio_state(1, 1);
             esp_hf_client_outgoing_data_ready();
             printf("HFP Audio connected.\n");
             i2s_start(I2S_NUM_0);
@@ -222,6 +236,8 @@ void hf_client_cb(esp_hf_client_cb_event_t event, esp_hf_client_cb_param_t *para
             i2s_stop(I2S_NUM_1);
             i2s_set_clk(I2S_NUM_1, sample_rate, I2S_DATA_BIT_WIDTH_16BIT, 2);
             i2s_start(I2S_NUM_1);
+            if(sink_cbs.on_audio_state)
+                sink_cbs.on_audio_state(1, 0);
             //i2s_channel_disable(*rx_chan);
         }
     }

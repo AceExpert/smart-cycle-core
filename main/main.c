@@ -42,16 +42,23 @@ TaskHandle_t* uart_task;
 i2c_master_bus_handle_t mpu_bus;
 i2c_master_dev_handle_t mpu_handle;
 
-uint8_t mpu_addr[3] = {0x6B, 0x1C, 0x3B};
+uint8_t mpu_addr[5] = {0x6B, 0x1C, 0x3B, 0x1B, 0x43};
 
 time_t alert_time = 0;
 time_t turb_time = 0;
 time_t turb_stop = 0;
 uint8_t to_alert = 0;
 
+clock_t acc_start_time = 0;
+clock_t acc_time = 0;
+clock_t acc_stop = 0;
+
 uint8_t cruise = 0;
 uint8_t unlocked = 0;
 uint8_t probe_done = 0;
+
+uint8_t audio_start = 0;
+uint8_t call_start = 0;
 
 const char* WIFI_SSID[] = {"GUEST_SECURED", "VS", "LBS", "STUDENT_SECURED", "CAMPUS_SECURED", "ACADEMIC_SECURED", "Academic"};
 const char* WIFI_USER = "24IM10016";
@@ -69,6 +76,7 @@ void on_gps_connected(int phone_sock);
 void on_gps_disconnected(int phone_sock);
 void uart_cmd_task(void*);
 void process_cmd(const char*);
+void audio_state_set_cb(uint8_t aud, uint8_t in_call);
 
 TimerHandle_t reconnect_timer = NULL;
 TimerHandle_t alert_timer = NULL;
@@ -407,6 +415,7 @@ void gps_server(void*) {
 }
 
 void start_bluetooth() {
+    set_audio_state_cb(audio_state_set_cb);
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     esp_bt_controller_init(&bt_cfg);
     esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
@@ -435,6 +444,11 @@ void start_bluetooth() {
     esp_hf_client_init();
 
     esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+}
+
+void audio_state_set_cb(uint8_t aud, uint8_t in_call) {
+    audio_start = aud;
+    call_start = in_call;
 }
 
 void setup_wifi() {
@@ -610,9 +624,11 @@ void app_main(void)
     
     uint8_t reset[2] = {*mpu_addr, 0};
     uint8_t cfg[2] = {mpu_addr[1], 0b00010000};
+    uint8_t g_cfg[2] = {mpu_addr[3], 0b00001000};
 
     i2c_master_transmit(mpu_handle, reset, 2, -1);
     i2c_master_transmit(mpu_handle, cfg, 2, -1);
+    //i2c_master_transmit(mpu_handle, g_cfg, 2, -1);
 
     //set_i2s_tx_chan(&i2s_tx);
     //set_i2s_rx_chan(&mic_rx);
@@ -661,6 +677,12 @@ void process_cmd(const char* cmd) {
         unlocked = 1;
         if(reconnect_timer != NULL && xTimerIsTimerActive(reconnect_timer) != pdFALSE) xTimerStop(reconnect_timer, portMAX_DELAY);
         esp_wifi_disconnect();
+        if(audio_start) {
+            send_uart_cmd(UART_NUM_2, ".audio_play\n", 12);
+        }
+        if(call_start) {
+            send_uart_cmd(UART_NUM_2, ".incall\n", 8);
+        }
     } else if (strcmp(cmd, "locked") == 0) {
         probe_done = 1;
         unlocked = 0;
@@ -785,6 +807,18 @@ void uart_cmd_task(void*) {
                 }
             };
         };
+
+        if(cruise && 0) {
+            int16_t gyro[3];
+            if(i2c_master_transmit_receive(mpu_handle, mpu_addr + 4, 1, raw, 6, -1) == 0) {
+
+                *gyro = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) / 65.50; 
+                gyro[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) / 65.50;
+                gyro[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) / 65.50;
+
+                
+            };
+        }
 
         if(!cmd_start)
             vTaskDelay(pdMS_TO_TICKS(10));
