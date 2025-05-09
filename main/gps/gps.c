@@ -8,6 +8,8 @@
 
 TimerHandle_t gps_timer = NULL;
 
+struct gps_info last_location = {.utc = 0, .lat = 0, .logt = 0};
+
 struct {
     void (*on_gps)(const char*, struct gps_info, int tlen);
 } gps_callbacks = {NULL};
@@ -35,11 +37,17 @@ void gps_start_reading() {
     xTimerReset(gps_timer, portMAX_DELAY);
 };
 
-void gps_stop_reading() {
+void gps_stop_reading_after(void*) {
+    vTaskDelay(pdMS_TO_TICKS(60000));
     if(gps_timer != NULL) {
         if(xTimerIsTimerActive(gps_timer) != pdFALSE)
             xTimerStop(gps_timer, portMAX_DELAY);
     };
+    vTaskDelete(NULL);
+}
+
+void gps_stop_reading() {
+    xTaskCreate(gps_stop_reading_after, "gps_st_rtask", 2048, NULL, 5, NULL);
 }
 
 void read_gps(TimerHandle_t timer) {
@@ -49,7 +57,7 @@ void read_gps(TimerHandle_t timer) {
     int t_len = 0;
     char* tag = malloc(1);
     while (1) {
-        int len = uart_read_bytes(UART_NUM_1, &data, 1, 20 / portTICK_PERIOD_MS);
+        int len = uart_read_bytes(UART_NUM_1, &data, 1, 200 / portTICK_PERIOD_MS);
         if(len) {
             if(!t_len && data != '$') continue;
             else if (!t_len) {
@@ -72,10 +80,7 @@ void read_gps(TimerHandle_t timer) {
                 tag[t_len++] = data;
             }
         } else {
-            t_len = 0;
-            free(tag);
-            tag = malloc(1);
-            continue;
+
         }
     }
 
@@ -86,10 +91,14 @@ void read_gps(TimerHandle_t timer) {
     /*free(tag);
     tag = "$GPGGA,1783.0,2219.30970,N,08717.92447,E,0,00,99.99,,,,,,*48\n";
     t_len = 61;*/
-
+    for(int i = 0; i < t_len; i++) printf("%c", tag[i]);
     sscanf(tag, "$GPGGA,%lf,%lf,%c,%lf,%c,", &gp_info.utc, &gp_info.lat, &gp_info.lat_dir, &gp_info.logt, &gp_info.logt_dir);
     
-    //printf("utc = %lf , lat = %lf %c , longt = %lf %c\n\n", gp_info.utc, gp_info.lat, gp_info.lat_dir, gp_info.logt, gp_info.logt_dir);
+    printf("utc = %lf , lat = %lf %c , longt = %lf %c\n\n", gp_info.utc, gp_info.lat, gp_info.lat_dir, gp_info.logt, gp_info.logt_dir);
+
+    if(gp_info.utc && gp_info.lat) {
+        last_location = gp_info;
+    };
 
     if(gps_callbacks.on_gps != NULL) {
         gps_callbacks.on_gps(tag, gp_info, t_len);

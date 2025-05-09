@@ -443,7 +443,7 @@ void start_bluetooth() {
     esp_a2d_sink_init();
     esp_hf_client_init();
 
-    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+    esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 }
 
 void audio_state_set_cb(uint8_t aud, uint8_t in_call) {
@@ -660,7 +660,7 @@ void on_gps_connected(int phone_sock) {
 }
 
 void on_gps_disconnected(int phone_sock) {
-    gps_stop_reading();
+    //gps_stop_reading();
 }
 
 void process_cmd(const char* cmd) {
@@ -677,6 +677,7 @@ void process_cmd(const char* cmd) {
         unlocked = 1;
         if(reconnect_timer != NULL && xTimerIsTimerActive(reconnect_timer) != pdFALSE) xTimerStop(reconnect_timer, portMAX_DELAY);
         esp_wifi_disconnect();
+        esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
         if(audio_start) {
             send_uart_cmd(UART_NUM_2, ".audio_play\n", 12);
         }
@@ -687,6 +688,8 @@ void process_cmd(const char* cmd) {
         probe_done = 1;
         unlocked = 0;
         cruise = 0;
+        gps_start_reading();
+        gps_stop_reading();
         if(reconnect_timer == NULL)
             reconnect_timer = xTimerCreate("reconn_timer", pdMS_TO_TICKS(9000), pdFALSE, NULL, reconnect);
         xTimerReset(reconnect_timer, portMAX_DELAY);
@@ -702,6 +705,10 @@ void process_cmd(const char* cmd) {
 
     } else if (strcmp(cmd, "vol_stop") == 0) {
 
+    } else if (strcmp(cmd, "audio_conn") == 0) {
+        esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+    } else if (strcmp(cmd, "audio_disconn") == 0) {
+        esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
     }
     else {
         struct split_result parts[5];
@@ -761,7 +768,7 @@ void uart_cmd_task(void*) {
                 accel[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) * 10 / 4096.00;
 
                 double net_a = sqrt(pow(accel[0], 2) + pow(accel[1], 2) + pow(accel[2], 2));
-                if (ABS(net_a - 10.5) >= 0.6) {
+                if (ABS(net_a - 10.5) >= 3) {
                     if(alert_time) {
                         alert_time = time(NULL);
                     }
@@ -773,7 +780,7 @@ void uart_cmd_task(void*) {
                                 send_uart_cmd(UART_NUM_2, ".cruise\n", 8);
                             } else {
                                 process_cmd("alert");
-                                //gps_start_reading();
+                                gps_start_reading();
                                 send_uart_cmd(UART_NUM_2, ".alert\n", 7);
                                 printf("alert\n");
                                 alert_time = time(NULL);
@@ -899,8 +906,8 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
 
         strcpy((char*)(ap_config.sta.password), WIFI_PSWD);
 
-        strcpy((char*)ap_config.sta.ssid, "CyberSky");
-        strcpy((char*)ap_config.sta.password, "hotspot.jio");
+        strcpy((char*)ap_config.sta.ssid, "realmejoe");
+        strcpy((char*)ap_config.sta.password, "joe12345");
         esp_wifi_sta_enterprise_disable();
 
         esp_wifi_set_config(WIFI_IF_STA, &ap_config);
