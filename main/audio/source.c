@@ -18,6 +18,7 @@
 FILE* play_file = NULL;
 FILE* cus_play_file = NULL;
 struct local_playlist* playlist = NULL;
+struct local_playlist* to_add_playlist = NULL;
 
 i2s_chan_handle_t* i2s_chan = NULL;
 
@@ -121,6 +122,8 @@ void add_playlist(const char* path, uint8_t repeat) {
     new_play->repeat = repeat;
     new_play->next = NULL;
     new_play->play_file = NULL;
+    new_play->to_clear = 0;
+    new_play->to_replay = 0;
     struct local_playlist* prev_play = playlist;
     while (prev_play)
     {
@@ -172,6 +175,35 @@ void clear_playlist(int index) {
         fclose(play_file);
         play_file = NULL;
     };
+}
+
+void safe_clear_playlist(int index) {
+    int i = 0;
+    struct local_playlist* prev = NULL;
+    struct local_playlist* current = playlist;
+    while (current) {
+        if (i == index) {
+            break;
+        }
+        prev = current;
+        current = current->next;
+        i++;
+    }
+    while(current) {
+        current->to_clear = 1;
+        current = current->next;
+    };
+}
+
+void startup_play() {
+    if(aud_suspend) {
+        clear_playlist(0);
+        add_playlist("/sdcard/startup.pcm", 0);
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+    } else {
+        safe_clear_playlist(0);
+        safe_add_playlist("/sdcard/startup.pcm", 0);
+    }
 }
 
 void cruise_mode() {

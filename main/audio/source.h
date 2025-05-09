@@ -12,6 +12,8 @@ struct local_playlist {
     char* play;
     uint8_t repeat;
     int id;
+    uint8_t to_clear;
+    uint8_t to_replay;
     FILE** play_file;
     struct local_playlist* next;
 };
@@ -36,3 +38,4 @@ void in_call();
 void end_call();
 void connect_speaker();
 void reconfig_speaker(uint8_t* address);
+void startup_play();

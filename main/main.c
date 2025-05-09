@@ -385,8 +385,8 @@ void set_new_force_thresh() {
 }
 
 void cycle_unlocked() {
-    add_playlist("/sdcard/startup.pcm", 0);
     unlocked = 1;
+    startup_play();
     xTaskCreate(lock_motor_control, "lock_motor_timer", 2048, NULL, 4, NULL);
     send_uart_cmd(UART_NUM_2, ".unlocked\n", 10);
     //add_playlist("/sdcard/music.pcm", 1);
@@ -426,7 +426,7 @@ void process_cmd(const char* cmd) {
         } else {
             send_uart_cmd(UART_NUM_2, ".locked\n", 8);
         }
-    } else if(strcmp(cmd, "audio_play") == 0) {
+    } else if (strcmp(cmd, "audio_play") == 0) {
         if(!cruise) {
             cruise = 1;
             cruise_mode();
