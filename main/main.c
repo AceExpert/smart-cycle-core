@@ -260,8 +260,8 @@ void app_main(void)
     dac_oneshot_new_channel(&h1_config, &h1);
     dac_oneshot_new_channel(&h2_config, &h2);
 
-    dac_oneshot_output_voltage(h1, 127);
-    dac_oneshot_output_voltage(h2, 255);
+    dac_oneshot_output_voltage(h1, 0);
+    dac_oneshot_output_voltage(h2, 0);
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -385,10 +385,10 @@ void set_new_force_thresh() {
 }
 
 void cycle_unlocked() {
+    add_playlist("/sdcard/startup.pcm", 0);
     unlocked = 1;
     xTaskCreate(lock_motor_control, "lock_motor_timer", 2048, NULL, 4, NULL);
     send_uart_cmd(UART_NUM_2, ".unlocked\n", 10);
-    add_playlist("/sdcard/startup.pcm", 0);
     //add_playlist("/sdcard/music.pcm", 1);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     if(get_force_active()) {
