@@ -115,7 +115,7 @@ void end_call() {
     };*/
 }
 
-void add_playlist(const char* path, uint8_t repeat) {
+void _add_playlist(struct local_playlist** plst, const char* path, uint8_t repeat) {
     struct local_playlist* new_play = malloc(sizeof(struct local_playlist));
     new_play->play = malloc(strlen(path) + 1);
     strcpy(new_play->play, path);
@@ -124,7 +124,7 @@ void add_playlist(const char* path, uint8_t repeat) {
     new_play->play_file = NULL;
     new_play->to_clear = 0;
     new_play->to_replay = 0;
-    struct local_playlist* prev_play = playlist;
+    struct local_playlist* prev_play = *plst;
     while (prev_play)
     {
         if(prev_play->next)
@@ -134,8 +134,16 @@ void add_playlist(const char* path, uint8_t repeat) {
     if(prev_play) {
         prev_play->next = new_play;
     } else {
-        playlist = new_play;
+        *plst = new_play;
     }
+}
+
+void add_playlist(const char* path, uint8_t repeat) {
+    _add_playlist(&playlist, path, repeat);
+}
+
+void safe_add_playlist(const char* path, uint8_t repeat) {
+    _add_playlist(&to_add_playlist, path, repeat);
 }
 
 void pop_playlist(struct local_playlist** p) {
@@ -417,6 +425,13 @@ int32_t send_audio(uint8_t* buf, int32_t len) {
         fclose(cus_play_file);
         cus_play_file = NULL;
     } 
+    while(playlist && playlist->to_clear) {
+        pop_playlist(&playlist);
+    }
+    while(to_add_playlist) {
+        add_playlist(to_add_playlist->play, to_add_playlist->repeat);
+        pop_playlist(&to_add_playlist);
+    }
     if (custom_play_path) {
         if(cus_play_file == NULL)
             cus_play_file = fopen(custom_play_path, "r");

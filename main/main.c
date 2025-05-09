@@ -409,7 +409,7 @@ void lock_motor_control(void*) {
     gpio_set_level(GPIO_NUM_27, unlocked? 1 : 0);
     gpio_set_level(GPIO_NUM_14, unlocked? 0: 1);
 
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(1100));
 
     gpio_set_level(GPIO_NUM_27, 0);
     gpio_set_level(GPIO_NUM_14, 0);
@@ -503,26 +503,31 @@ void monitor_motion(void*) {
             {
             case PREV:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".prev", false);
+                xTaskCreate(haptic_pulse, "haptic_pulse", 2048, (void*)1, 4, NULL);
                 send_uart_cmd(UART_NUM_2, ".prev\n", 6);
                 break;
             
             case NEXT:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".next", false);
+                xTaskCreate(haptic_pulse, "haptic_pulse", 2048, (void*)2, 4, NULL);
                 send_uart_cmd(UART_NUM_2, ".next\n", 6);
                 break;
 
             case PLAY_PAUSE:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 5, (uint8_t*)".play", false);
+                xTaskCreate(haptic_pulse, "haptic_pulse", 2048, (void*)3, 4, NULL);
                 send_uart_cmd(UART_NUM_2, ".play\n", 6);
                 break;
 
             case VOL_UP:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 7, (uint8_t*)".vol_up", false);
+                xTaskCreate(haptic_pulse, "haptic_pulse", 2048, (void*)2, 4, NULL);
                 send_uart_cmd(UART_NUM_2, ".vol_up\n", 8);
                 break;
 
             case VOL_DOWN:
                 esp_ble_gatts_send_indicate(get_gatts_prof()->gatts_if, get_gatts_prof()->conn_id, get_gatts_prof()->char_handle, 9, (uint8_t*)".vol_down", false);
+                xTaskCreate(haptic_pulse, "haptic_pulse", 2048, (void*)1, 4, NULL);
                 send_uart_cmd(UART_NUM_2, ".vol_down\n", 10);
                 break;
 
@@ -533,11 +538,13 @@ void monitor_motion(void*) {
 
             case HORN:
                 set_custom_play("/sdcard/horn.pcm");
+                xTaskCreate(haptic_pulse, "haptic_pulse", 2048, (void*)3, 4, NULL);
                 esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
                 break;
 
             case REV:
                 set_custom_play("/sdcard/rev.pcm");
+                xTaskCreate(haptic_pulse, "haptic_pulse", 2048, (void*)3, 4, NULL);
                 esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
                 break;
 
