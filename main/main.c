@@ -430,7 +430,7 @@ void process_cmd(const char* cmd) {
             cruise = 1;
             cruise_mode();
         } else {
-            safe_clear_playlist(0);
+            //safe_clear_playlist(0);
         }
         if(!i2s_handle_get()) {
             i2s_handle_set(&i2s_rx);
