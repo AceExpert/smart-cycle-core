@@ -443,7 +443,9 @@ void start_bluetooth() {
     esp_a2d_sink_init();
     esp_hf_client_init();
 
-    esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+    // esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+
 }
 
 void audio_state_set_cb(uint8_t aud, uint8_t in_call) {
@@ -688,7 +690,7 @@ void process_cmd(const char* cmd) {
         probe_done = 1;
         unlocked = 0;
         cruise = 0;
-        gps_start_reading();
+        //gps_start_reading();
         gps_stop_reading();
         if(reconnect_timer == NULL)
             reconnect_timer = xTimerCreate("reconn_timer", pdMS_TO_TICKS(9000), pdFALSE, NULL, reconnect);
@@ -708,7 +710,7 @@ void process_cmd(const char* cmd) {
     } else if (strcmp(cmd, "audio_conn") == 0) {
         esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
     } else if (strcmp(cmd, "audio_disconn") == 0) {
-        esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+        // esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
     }
     else {
         struct split_result parts[5];
@@ -733,6 +735,10 @@ void uart_cmd_task(void*) {
 
         uint8_t d;
         int read_len = uart_read_bytes(UART_NUM_2, &d, 1, 1 / portTICK_PERIOD_MS);
+        if(read_len) {
+            if(d == '\n') printf("\\n");
+            printf("%c", d);
+        }
         
         if(cmd_start) {
             if (read_len < 1) {
@@ -759,7 +765,7 @@ void uart_cmd_task(void*) {
         if (read_len && d == '.') {
             cmd_start = 1;
         }
-        if(!cruise) {
+        if(!cruise && 0) {
             int16_t accel[3];
             if(i2c_master_transmit_receive(mpu_handle, mpu_addr + 2, 1, raw, 6, -1) == 0) {
 
@@ -780,7 +786,7 @@ void uart_cmd_task(void*) {
                                 send_uart_cmd(UART_NUM_2, ".cruise\n", 8);
                             } else {
                                 process_cmd("alert");
-                                gps_start_reading();
+                                //gps_start_reading();
                                 send_uart_cmd(UART_NUM_2, ".alert\n", 7);
                                 printf("alert\n");
                                 alert_time = time(NULL);
@@ -906,8 +912,8 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
 
         strcpy((char*)(ap_config.sta.password), WIFI_PSWD);
 
-        strcpy((char*)ap_config.sta.ssid, "realmejoe");
-        strcpy((char*)ap_config.sta.password, "joe12345");
+        strcpy((char*)ap_config.sta.ssid, "SputhNet");
+        strcpy((char*)ap_config.sta.password, "hotspot.sputh");
         esp_wifi_sta_enterprise_disable();
 
         esp_wifi_set_config(WIFI_IF_STA, &ap_config);

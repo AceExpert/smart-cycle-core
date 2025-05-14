@@ -47,7 +47,7 @@ void gps_stop_reading_after(void*) {
 }
 
 void gps_stop_reading() {
-    xTaskCreate(gps_stop_reading_after, "gps_st_rtask", 2048, NULL, 5, NULL);
+    //xTaskCreate(gps_stop_reading_after, "gps_st_rtask", 2048, NULL, 5, NULL);
 }
 
 void read_gps(TimerHandle_t timer) {
