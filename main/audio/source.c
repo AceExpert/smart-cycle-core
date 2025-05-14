@@ -215,15 +215,8 @@ void startup_play() {
 }
 
 void cruise_mode() {
-    if (playlist) {
-        if(strcmp(playlist->play, "/sdcard/startup.pcm") == 0) {
-            clear_playlist(1);
-        } else {
-            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
-            if(play_file) fclose(play_file);
-            play_file = NULL;
-            clear_playlist(0);
-        }
+    if(!aud_suspend) {
+        
     }
 }
 

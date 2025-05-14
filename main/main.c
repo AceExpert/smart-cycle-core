@@ -390,7 +390,6 @@ void cycle_unlocked() {
     xTaskCreate(lock_motor_control, "lock_motor_timer", 2048, NULL, 4, NULL);
     send_uart_cmd(UART_NUM_2, ".unlocked\n", 10);
     //add_playlist("/sdcard/music.pcm", 1);
-    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     if(get_force_active()) {
         adc_continuous_start(adc_handle);
     };
@@ -431,10 +430,12 @@ void process_cmd(const char* cmd) {
             cruise = 1;
             cruise_mode();
         } else {
-            clear_playlist(0);
+            safe_clear_playlist(0);
         }
-        i2s_handle_set(&i2s_rx);
-        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+        if(!i2s_handle_get()) {
+            i2s_handle_set(&i2s_rx);
+            esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+        };
     } else if (strcmp(cmd, "audio_stop") == 0) {
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
     } else if (strcmp(cmd, "incall") == 0) {
@@ -452,7 +453,7 @@ void process_cmd(const char* cmd) {
             cruise = 1;
             cruise_mode();
         }
-    } else if (strcmp(cmd, "alert_stop") == 0) {    
+    } else if (strcmp(cmd, "alert_stop") == 0 && !unlocked) {    
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
         clear_playlist(0);
     }
@@ -649,6 +650,131 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
             k++;
             continue;
         };
+
+        if(final_val > force_thresh && !force_start[i]) { //final_val < 3700 (3801)
+            tap_end[i] = 0;
+            force_start[i] = clock();
+        } else if (clock() - force_start[i] >= 400 && final_val > force_thresh && !vol_ctrl[i]) {
+            if(force_start[j] && (force_start[i])) { // && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])
+                if(taps[i] == 1 || taps[j] == 1) {
+                    rev = 1;
+                    add_media(&media_cmds, REV, 0);
+                } else {
+                    horn = 1;
+                    add_media(&media_cmds, HORN, 0);
+                };
+                vol_ctrl[i] = 1;
+                vol_ctrl[j] = 1;
+            } else {
+                add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
+                vol_ctrl[i] = 1;
+            };
+        };
+
+        if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
+            if(taps[i] && !taps[j]) { 
+                if(taps[i] == 1)
+                    add_media(&media_cmds, i? NEXT : PREV, 0);
+                tap_end[i] = 0;
+                taps[i] = 0;
+            } else if (taps[i] == 1 && taps[j] == 1) {
+                add_media(&media_cmds, PLAY_PAUSE, 0);
+                tap_end[i] = 0;
+                taps[i] = 0;
+                tap_end[j] = 0;
+                taps[j] = 0;
+            } else {
+                if(tap_end[i]) {
+                    tap_end[i] = 0;
+                } 
+                if(tap_end[j]) {
+                    tap_end[j] = 0;
+                }
+                if(taps[i]) taps[i] = 0;
+                if(taps[j]) taps[j] = 0;
+            };   
+        }
+
+        if(force_start[i] && final_val < 100 && !tap_end[i]) { //final_val > 4000 
+            clock_t diff = clock() - force_start[i];
+            if(diff < 400 && diff >= 10) {
+                taps[i]++;
+                tap_end[i] = clock();
+            } else if (diff >= 400) {
+                if(horn) {
+                    horn = 0;
+                    add_media(&media_cmds, HORN_STOP, 0);
+                    taps[j] = 0;
+                    vol_ctrl[j] = 0;
+                } else if (rev) {
+                    rev = 0;
+                    add_media(&media_cmds, REV_STOP, 0);
+                    taps[j] = 0;
+                    vol_ctrl[j] = 0;
+                }
+                add_media(&media_cmds, VOL_STOP, 0);
+                vol_ctrl[i] = 0;
+                taps[i] = 0;
+            } else {
+                taps[i] = 0;
+            }
+            force_start[i] = 0;
+        }
+
+        if(k > 0) {
+            break;
+        }
+        k++;
+    };
+    return false;
+}
+
+struct {
+    uint16_t value;
+    clock_t time;
+} adc_record[2][100];
+
+int adc_rec_len[2] = {0, 0};
+
+bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data)
+{
+    adc_digi_output_data_t* final_data = (adc_digi_output_data_t*)(data->conv_frame_buffer);
+
+    int sens = 0;
+
+    for(int k = 0; k < data->size;) {
+        uint16_t final_val = final_data->type1.data;
+
+        int gpio_num;
+        adc_continuous_channel_to_io(ADC_UNIT_1, final_data->type1.channel, &gpio_num);
+
+        int i = (int)(gpio_num == 33);
+        int j = (int)(gpio_num != 33);
+
+        if (k == 0)
+            sens = i;
+
+        if(k > 0 && i == sens) {
+            final_data++;
+            k++;
+            continue;
+        };
+
+        if(adc_rec_len[i] < 100) {
+            adc_record[i][adc_rec_len[i]].time = clock();
+            adc_record[i][adc_rec_len[i]++].value = final_val;
+        } else {
+
+        }
+
+        if(!force_start[i]) {
+            int ri = adc_rec_len - 1;
+            while (ri >= 0) {
+                if(clock() - adc_record[i][ri].time <= 200 && final_val - adc_record[i][ri].value >= 600) {
+                    force_start[i] = clock();
+                } else if (clock() - adc_record[i][ri].time > 200) break;
+            }
+        }
 
         if(final_val > force_thresh && !force_start[i]) { //final_val < 3700 (3801)
             tap_end[i] = 0;
