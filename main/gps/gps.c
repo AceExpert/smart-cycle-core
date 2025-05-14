@@ -8,6 +8,8 @@
 
 TimerHandle_t gps_timer = NULL;
 
+TaskHandle_t gps_stopper_task = NULL;
+
 struct gps_info last_location = {.utc = 0, .lat = 0, .logt = 0};
 
 struct {
@@ -43,11 +45,13 @@ void gps_stop_reading_after(void*) {
         if(xTimerIsTimerActive(gps_timer) != pdFALSE)
             xTimerStop(gps_timer, portMAX_DELAY);
     };
+    gps_stopper_task = NULL;
     vTaskDelete(NULL);
 }
 
 void gps_stop_reading() {
-    //xTaskCreate(gps_stop_reading_after, "gps_st_rtask", 2048, NULL, 5, NULL);
+    if(gps_stopper_task != NULL) vTaskDelete(gps_stopper_task);
+    xTaskCreate(gps_stop_reading_after, "gps_st_rtask", 2048, NULL, 5, &gps_stopper_task);
 }
 
 void read_gps(TimerHandle_t timer) {
