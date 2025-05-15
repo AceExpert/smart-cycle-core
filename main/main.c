@@ -734,9 +734,10 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
 struct {
     uint16_t value;
     clock_t time;
-} adc_record[2][10];
+} adc_last_record[2] = {{0, 0}, {0, 0}};
 
-int adc_rec_len[2] = {0, 0};
+int net_adc_change[2] = {0, 0};
+clock_t force_inc_start = 0;
 
 bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data)
 {
@@ -762,19 +763,26 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
             continue;
         };
 
-        
-        if(adc_rec_len[i] < 10) {
-            adc_record[i][adc_rec_len[i]].time = clock();
-            adc_record[i][(adc_rec_len[i])++].value = final_val;
+        if(!adc_last_record[i].time) {
+            adc_last_record[i].value = final_val;
+            adc_last_record[i].time = clock();
         } else {
-            for(int t = 0; t < adc_rec_len[i] - 1; t++) {
-                adc_record[i][t] = adc_record[i][t + 1];
+            if(!force_start[i]) {
+                uint16_t change = final_val - adc_last_record[i].value;
+                if ()
+                if(final_val - adc_last_record[i].value > 0) {
+                    if(!force_inc_start) {
+                        force_inc_start = clock();
+                    }
+                    net_adc_change[i] += change;
+                } else {
+                    net_adc_change[i] = 0;
+                    force_inc_start = 0;
+                }
             }
-            adc_record[i][adc_rec_len[i] - 1].time = clock();
-            adc_record[i][adc_rec_len[i] - 1].value = final_val;
         }
 
-        /*if(!force_start[i]) {
+        if(!force_start[i]) {
             int ri = adc_rec_len[i] - 1;
             while (ri >= 0) {
                 if(clock() - adc_record[i][ri].time <= 200 && final_val - adc_record[i][ri].value >= 600) {
@@ -786,7 +794,7 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
                 else if (clock() - adc_record[i][ri].time > 200) break;
                 ri--;
             }
-        }*/
+        }
 
         if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
             if(taps[i] && !taps[j]) { 
