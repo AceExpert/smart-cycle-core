@@ -48,6 +48,7 @@ uint8_t unlocked = 0;
 uint8_t cruise = 0;
 
 clock_t force_start[2] = {0, 0};
+uint16_t force_st_val[2] = {0, 0};
 clock_t tap_end[2] = {0, 0};
 clock_t last_tap[2] = {0, 0};
 
@@ -114,6 +115,7 @@ void on_speaker_connect();
 void monitor_motion(void*);
 void media_ctrl_exec(void*);
 bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data);
+bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data);
 void lock_motor_control(void*);
 void set_new_force_thresh();
 void haptic_pulse(void* param);
@@ -194,7 +196,7 @@ void setup_adc() {
     adc_continuous_config(adc_handle, &adc_cfg);
 
     adc_continuous_evt_cbs_t adc_cbs = {
-        .on_conv_done = adc_cb,
+        .on_conv_done = adc_cb_2,
     };
 
     adc_continuous_register_event_callbacks(adc_handle, &adc_cbs, NULL);
@@ -335,12 +337,12 @@ void app_main(void)
     start_bluetooth();
     setup_ble();
 
-    //adc_continuous_start(adc_handle);
+    adc_continuous_start(adc_handle);
     
-    xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
+    //xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
     TimerHandle_t user_setup = xTimerCreate("user_setup_timer", pdMS_TO_TICKS(500), pdFALSE, NULL, user_setup_timer);
     xTimerReset(user_setup, portMAX_DELAY); 
-    //xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
+    xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
     //xTaskCreate(haptic_pulse, "haptic_pulse", 2048, 1, 4, NULL);
 }
 
@@ -732,7 +734,7 @@ bool adc_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *dat
 struct {
     uint16_t value;
     clock_t time;
-} adc_record[2][100];
+} adc_record[2][10];
 
 int adc_rec_len[2] = {0, 0};
 
@@ -760,41 +762,31 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
             continue;
         };
 
-        if(adc_rec_len[i] < 100) {
+        
+        if(adc_rec_len[i] < 10) {
             adc_record[i][adc_rec_len[i]].time = clock();
-            adc_record[i][adc_rec_len[i]++].value = final_val;
+            adc_record[i][(adc_rec_len[i])++].value = final_val;
         } else {
-
+            for(int t = 0; t < adc_rec_len[i] - 1; t++) {
+                adc_record[i][t] = adc_record[i][t + 1];
+            }
+            adc_record[i][adc_rec_len[i] - 1].time = clock();
+            adc_record[i][adc_rec_len[i] - 1].value = final_val;
         }
 
-        if(!force_start[i]) {
-            int ri = adc_rec_len - 1;
+        /*if(!force_start[i]) {
+            int ri = adc_rec_len[i] - 1;
             while (ri >= 0) {
                 if(clock() - adc_record[i][ri].time <= 200 && final_val - adc_record[i][ri].value >= 600) {
+                    tap_end[i] = 0;
                     force_start[i] = clock();
-                } else if (clock() - adc_record[i][ri].time > 200) break;
+                    force_st_val[i] = adc_record[i][ri].value;
+                    break;
+                }
+                else if (clock() - adc_record[i][ri].time > 200) break;
+                ri--;
             }
-        }
-
-        if(final_val > force_thresh && !force_start[i]) { //final_val < 3700 (3801)
-            tap_end[i] = 0;
-            force_start[i] = clock();
-        } else if (clock() - force_start[i] >= 400 && final_val > force_thresh && !vol_ctrl[i]) {
-            if(force_start[j] && (force_start[i])) { // && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])
-                if(taps[i] == 1 || taps[j] == 1) {
-                    rev = 1;
-                    add_media(&media_cmds, REV, 0);
-                } else {
-                    horn = 1;
-                    add_media(&media_cmds, HORN, 0);
-                };
-                vol_ctrl[i] = 1;
-                vol_ctrl[j] = 1;
-            } else {
-                add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
-                vol_ctrl[i] = 1;
-            };
-        };
+        }*/
 
         if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
             if(taps[i] && !taps[j]) { 
@@ -820,12 +812,12 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
             };   
         }
 
-        if(force_start[i] && final_val < 100 && !tap_end[i]) { //final_val > 4000 
+        if(force_start[i] && (ABS(final_val - force_st_val[i]) <= 20 || final_val < force_st_val[i])) {
             clock_t diff = clock() - force_start[i];
-            if(diff < 400 && diff >= 10) {
+            if(diff < 300 && diff >= 10) {
                 taps[i]++;
                 tap_end[i] = clock();
-            } else if (diff >= 400) {
+            } else if (diff >= 300) {
                 if(horn) {
                     horn = 0;
                     add_media(&media_cmds, HORN_STOP, 0);
@@ -844,6 +836,21 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
                 taps[i] = 0;
             }
             force_start[i] = 0;
+        } else if (force_start[i] && clock() - force_start[i] >= 400 && !vol_ctrl[i]) {
+            if(force_start[j] && (force_start[i])) { // && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])
+                if(taps[i] == 1 || taps[j] == 1) {
+                    rev = 1;
+                    add_media(&media_cmds, REV, 0);
+                } else {
+                    horn = 1;
+                    add_media(&media_cmds, HORN, 0);
+                };
+                vol_ctrl[i] = 1;
+                vol_ctrl[j] = 1;
+            } else {
+                add_media(&media_cmds, i? VOL_UP : VOL_DOWN, final_val);
+                vol_ctrl[i] = 1;
+            };
         }
 
         if(k > 0) {
