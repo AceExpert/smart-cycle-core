@@ -32,11 +32,12 @@ void gps_disable() {
 }
 
 void gps_start_reading() {
+    /*
     if(gps_timer == NULL) {
         gps_timer = xTimerCreate("gps_timer", pdMS_TO_TICKS(5000), pdTRUE, NULL, read_gps);
     }
     read_gps(NULL);
-    xTimerReset(gps_timer, portMAX_DELAY);
+    xTimerReset(gps_timer, portMAX_DELAY);*/
 };
 
 void gps_stop_reading_after(void*) {
@@ -50,8 +51,9 @@ void gps_stop_reading_after(void*) {
 }
 
 void gps_stop_reading() {
+    /*
     if(gps_stopper_task != NULL) vTaskDelete(gps_stopper_task);
-    xTaskCreate(gps_stop_reading_after, "gps_st_rtask", 2048, NULL, 5, &gps_stopper_task);
+    xTaskCreate(gps_stop_reading_after, "gps_st_rtask", 2048, NULL, 5, &gps_stopper_task);*/
 }
 
 void read_gps(TimerHandle_t timer) {
