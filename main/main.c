@@ -339,10 +339,10 @@ void app_main(void)
 
     adc_continuous_start(adc_handle);
     
-    //xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
+    xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
     TimerHandle_t user_setup = xTimerCreate("user_setup_timer", pdMS_TO_TICKS(500), pdFALSE, NULL, user_setup_timer);
     xTimerReset(user_setup, portMAX_DELAY); 
-    xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
+    //xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
     //xTaskCreate(haptic_pulse, "haptic_pulse", 2048, 1, 4, NULL);
 }
 
@@ -769,7 +769,7 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
         } else {
             if(!force_start[i]) {
                 uint16_t change = final_val - adc_last_record[i].value;
-                if ()
+                //if ()
                 if(final_val - adc_last_record[i].value > 0) {
                     if(!force_inc_start) {
                         force_inc_start = clock();
@@ -781,7 +781,7 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
                 }
             }
         }
-
+/*
         if(!force_start[i]) {
             int ri = adc_rec_len[i] - 1;
             while (ri >= 0) {
@@ -795,7 +795,7 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
                 ri--;
             }
         }
-
+*/
         if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
             if(taps[i] && !taps[j]) { 
                 if(taps[i] == 1)
