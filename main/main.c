@@ -769,8 +769,16 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
         } else {
             if(!force_start[i]) {
                 uint16_t change = final_val - adc_last_record[i].value;
-                //if ()
-                if(final_val - adc_last_record[i].value > 0) {
+                if (change + net_adc_change >= 600 && force_inc_start && clock() - force_inc_start <= 200) {
+                    force_start[i] = clock();
+                    force_st_val[i] = final_val - net_adc_change[i] - change;
+                    tap_end[i] = 0;
+                    net_adc_change[i] = 0;
+                    force_inc_start = 0;
+                } else if (force_inc_start && clock() - force_inc_start > 200) {
+                    force_inc_start = 0;
+                    net_adc_change[i] = 0;
+                } else if(final_val - adc_last_record[i].value > 0) {
                     if(!force_inc_start) {
                         force_inc_start = clock();
                     }
@@ -844,7 +852,7 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
                 taps[i] = 0;
             }
             force_start[i] = 0;
-        } else if (force_start[i] && clock() - force_start[i] >= 400 && !vol_ctrl[i]) {
+        } else if (force_start[i] && clock() - force_start[i] >= 300 && !vol_ctrl[i]) {
             if(force_start[j] && (force_start[i])) { // && (ABS(force_start[i] - force_start[j]) <= 100 || vol_ctrl[j])
                 if(taps[i] == 1 || taps[j] == 1) {
                     rev = 1;
