@@ -824,7 +824,7 @@ void uart_cmd_task(void*) {
             int16_t gyro[3];
             if(i2c_master_transmit_receive(mpu_handle, mpu_addr + 4, 1, raw, 6, -1) == 0) {
 
-                *gyro = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) / 65.50; 
+                *gyro = MPU_VALUE((int16_t)raw[0], (int16_t)raw[1]) / 65.50;
                 gyro[1] = MPU_VALUE((int16_t)raw[2], (int16_t)raw[3]) / 65.50;
                 gyro[2] = MPU_VALUE((int16_t)raw[4], (int16_t)raw[5]) / 65.50;
 
