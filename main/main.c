@@ -48,7 +48,7 @@ uint8_t unlocked = 0;
 uint8_t cruise = 0;
 
 clock_t force_start[2] = {0, 0};
-uint16_t force_st_val[2] = {0, 0};
+int force_st_val[2] = {0, 0};
 clock_t tap_end[2] = {0, 0};
 clock_t last_tap[2] = {0, 0};
 
@@ -339,10 +339,10 @@ void app_main(void)
 
     adc_continuous_start(adc_handle);
     
-    xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
+    // xTaskCreate(monitor_motion, "motion_monitor_task", 3584, NULL, 5, NULL);
     TimerHandle_t user_setup = xTimerCreate("user_setup_timer", pdMS_TO_TICKS(500), pdFALSE, NULL, user_setup_timer);
     xTimerReset(user_setup, portMAX_DELAY); 
-    //xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
+    xTaskCreate(media_ctrl_exec, "media_ctrls", 2048, NULL, 5, NULL);
     //xTaskCreate(haptic_pulse, "haptic_pulse", 2048, 1, 4, NULL);
 }
 
@@ -403,7 +403,7 @@ void cycle_locked() {
     xTaskCreate(lock_motor_control, "lock_motor_timer", 2048, NULL, 4, NULL);
     i2s_handle_set(NULL);
     send_uart_cmd(UART_NUM_2, ".locked\n", 8);
-    adc_continuous_stop(adc_handle);
+    // adc_continuous_stop(adc_handle);
 }
 
 void lock_motor_control(void*) {    
@@ -618,6 +618,21 @@ void media_ctrl_exec(void*){
                 printf("vol_stop\n");
 
                 break;
+            
+            case HORN:
+                printf("Horn start\n");
+
+                break;
+
+            case REV:
+                printf("Rev start\n");
+                
+                break;
+
+            case REV_STOP:
+            case HORN_STOP:
+                printf("Horn Rev stop\n");
+                break;
 
             default:
                 break;
@@ -737,7 +752,7 @@ struct {
 } adc_last_record[2] = {{0, 0}, {0, 0}};
 
 int net_adc_change[2] = {0, 0};
-clock_t force_inc_start = 0;
+clock_t force_inc_start[2] = {0, 0};
 
 bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *data, void *user_data)
 {
@@ -763,31 +778,43 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
             continue;
         };
 
+        if(adc_last_record[i].time && clock() - adc_last_record[i].time <= 7) {
+            if(k > 0) {
+                break;
+            }
+            k++;
+            continue;
+        };
+
         if(!adc_last_record[i].time) {
             adc_last_record[i].value = final_val;
             adc_last_record[i].time = clock();
         } else {
+            
             if(!force_start[i]) {
-                uint16_t change = final_val - adc_last_record[i].value;
-                if (change + net_adc_change >= 600 && force_inc_start && clock() - force_inc_start <= 200) {
+                int change = final_val - adc_last_record[i].value;
+                if ((change + net_adc_change[i]) >= 800 && force_inc_start[i] && (clock() - force_inc_start[i]) <= 120) {
                     force_start[i] = clock();
                     force_st_val[i] = final_val - net_adc_change[i] - change;
                     tap_end[i] = 0;
                     net_adc_change[i] = 0;
-                    force_inc_start = 0;
-                } else if (force_inc_start && clock() - force_inc_start > 200) {
-                    force_inc_start = 0;
+                    force_inc_start[i] = 0;
+                } else if (force_inc_start[i] && (clock() - force_inc_start[i]) >= 120) {
+                    force_inc_start[i] = 0;
                     net_adc_change[i] = 0;
-                } else if(final_val - adc_last_record[i].value > 0) {
-                    if(!force_inc_start) {
-                        force_inc_start = clock();
+                } else if(final_val - adc_last_record[i].value > 0 || force_inc_start[i]) {
+                    if(!force_inc_start[i]) {
+                        force_inc_start[i] = clock();
                     }
                     net_adc_change[i] += change;
                 } else {
                     net_adc_change[i] = 0;
-                    force_inc_start = 0;
+                    force_inc_start[i] = 0;
                 }
             }
+
+            adc_last_record[i].value = final_val;
+            adc_last_record[i].time = clock();
         }
 /*
         if(!force_start[i]) {
@@ -804,7 +831,7 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
             }
         }
 */
-        if(tap_end[i] && clock() - tap_end[i] >= 280 && !force_start[i]) {
+        if(tap_end[i] && clock() - tap_end[i] >= 200 && !force_start[i]) {
             if(taps[i] && !taps[j]) { 
                 if(taps[i] == 1)
                     add_media(&media_cmds, i? NEXT : PREV, 0);
@@ -828,9 +855,9 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
             };   
         }
 
-        if(force_start[i] && (ABS(final_val - force_st_val[i]) <= 20 || final_val < force_st_val[i])) {
+        if(force_start[i] && (ABS(final_val - force_st_val[i]) <= 10 || final_val <= force_st_val[i])) {
             clock_t diff = clock() - force_start[i];
-            if(diff < 300 && diff >= 10) {
+            if(diff < 300 && diff >= 5) {
                 taps[i]++;
                 tap_end[i] = clock();
             } else if (diff >= 300) {

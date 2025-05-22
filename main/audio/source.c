@@ -62,7 +62,7 @@ void set_custom_play(char* path) {
 
 void connect_speaker() {
     speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
-    esp_a2d_source_connect(speaker_addr);
+    //esp_a2d_source_connect(speaker_addr);
 }
 
 void reconfig_speaker(uint8_t* new_address) {
