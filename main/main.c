@@ -722,6 +722,21 @@ void process_cmd(const char* cmd) {
     }
 }
 
+struct gyro_reading {
+    int16_t gyro_x;
+    int16_t gyro_y;
+    int16_t gyro_Z;
+    clock_t time;
+} gyro_last = {0, 0, 0, 0};
+
+struct gyro_change {
+    int gyro_x;
+    int gyro_y;
+    int gyro_z;
+} net_gyro_change = {0, 0, 0};
+
+struct gyro_change gyro_start = {0, 0, 0};
+
 void uart_cmd_task(void*) {
     uint8_t raw[6];
 
