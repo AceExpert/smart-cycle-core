@@ -41,3 +41,4 @@ void reconfig_speaker(uint8_t* address);
 void startup_play();
 void safe_clear_playlist(int index);
 void safe_add_playlist(const char* path, uint8_t repeat);
+uint8_t is_speaker_connected();

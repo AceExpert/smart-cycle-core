@@ -46,6 +46,7 @@ time_t turb_stop = 0;
 
 uint8_t unlocked = 0;
 uint8_t cruise = 0;
+uint8_t cycle_online = 0;
 
 clock_t force_start[2] = {0, 0};
 int force_st_val[2] = {0, 0};
@@ -119,6 +120,17 @@ bool adc_cb_2(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *d
 void lock_motor_control(void*);
 void set_new_force_thresh();
 void haptic_pulse(void* param);
+void rcv_bt_packet(uint8_t *data, uint16_t len);
+void rcv_bt_available();
+
+esp_vhci_host_callback_t vhci_cb = {
+    .notify_host_send_available = rcv_bt_available,
+    .notify_host_recv = rcv_bt_packet,
+};
+
+uint8_t is_server_connected() {
+    return cycle_online;
+}
 
 void start_bluetooth() {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -155,12 +167,14 @@ void setup_ble() {
     set_cycle_callback(LOCKED, cycle_locked);
     set_cycle_callback(UNLOCKED, cycle_unlocked);
     set_cycle_callback(THRESH, set_new_force_thresh);
+    set_cycle_callback(SERVER_CONN, is_server_connected);
 
     set_adc_handle(adc_handle);
 
     esp_ble_gap_register_callback(esp_ble_gap_cb);
     esp_ble_gatts_register_callback(esp_gatts_cb);
     esp_ble_gatts_app_register(0);
+    // esp_ble_gattc_app_register(1);
 
     esp_ble_gatt_set_local_mtu(200);
 }
@@ -391,6 +405,7 @@ void cycle_unlocked() {
     startup_play();
     xTaskCreate(lock_motor_control, "lock_motor_timer", 2048, NULL, 4, NULL);
     send_uart_cmd(UART_NUM_2, ".unlocked\n", 10);
+    // esp_vhci_host_register_callback(&vhci_cb);
     //add_playlist("/sdcard/music.pcm", 1);
     if(get_force_active()) {
         adc_continuous_start(adc_handle);
@@ -418,6 +433,18 @@ void lock_motor_control(void*) {
     vTaskDelete(NULL);
 }
 
+void rcv_bt_available() {
+    printf("VHCI Packets available\n");
+};
+
+void rcv_bt_packet(uint8_t *data, uint16_t len) {
+    printf("BT Packet recv len = %d\nstart: ", len);
+    for(int i = 0; i < len; i++) {
+        printf("%x ", data[i]);
+    }
+    printf(" :end\n");
+};
+
 void process_cmd(const char* cmd) {
     if (strcmp(cmd, "ack") == 0) {
         acked();
@@ -440,6 +467,12 @@ void process_cmd(const char* cmd) {
         };
     } else if (strcmp(cmd, "audio_stop") == 0) {
         esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_SUSPEND);
+    } else if (strcmp(cmd, "server_conn") == 0) {
+        cycle_online = 1;
+        connected_to_server(1);
+    } else if (strcmp(cmd, "server_disconn") == 0) {
+        cycle_online = 0;
+        connected_to_server(0);
     } else if (strcmp(cmd, "incall") == 0) {
         in_call();
         //esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);

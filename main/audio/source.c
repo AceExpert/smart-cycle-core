@@ -33,6 +33,8 @@ uint8_t hfp_on = 0;
 uint8_t hfp_off = 0;
 uint8_t aud_suspend = 1;
 
+uint8_t speaker_disconnected = 1;
+
 uint8_t speaker_reconfig = 0;
 esp_bd_addr_t new_speaker_address;
 
@@ -63,6 +65,10 @@ void set_custom_play(char* path) {
 void connect_speaker() {
     speaker_addr = (uint8_t*)get_cache_field("speaker_addr");
     //esp_a2d_source_connect(speaker_addr);
+}
+
+uint8_t is_speaker_connected() {
+    return !speaker_disconnected;
 }
 
 void reconfig_speaker(uint8_t* new_address) {
@@ -473,6 +479,7 @@ void esp_hf_ag_cb(esp_hf_cb_event_t event, esp_hf_cb_param_t* param) {
     case ESP_HF_CONNECTION_STATE_EVT:
         if(param->conn_stat.state == ESP_HF_CONNECTION_STATE_SLC_CONNECTED) {
             printf("HFP Ag connected.\n");
+            speaker_disconnected = 0;
             //esp_a2d_source_connect(speaker_addr);
             /*if(hfp_on) {
                 esp_hf_ag_audio_connect(param->conn_stat.remote_bda);
@@ -481,6 +488,7 @@ void esp_hf_ag_cb(esp_hf_cb_event_t event, esp_hf_cb_param_t* param) {
         }
         if(param->conn_stat.state == ESP_HF_CONNECTION_STATE_DISCONNECTED) {
             printf("HFP Ag disconnected.\n");
+            speaker_disconnected = 1;
             if(!speaker_reconfig) {
                 esp_hf_ag_slc_connect(speaker_addr);
             };
